@@ -1,5 +1,8 @@
 <div id="leon-widget-root"></div>
 
+<!-- Include marked.js for parsing Markdown output -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
 <style>
 /* ---------- Leon: floating AI assistant ---------- */
 .leon-fab{position:fixed;bottom:24px;right:24px;width:66px;height:66px;border-radius:50%;
@@ -25,10 +28,34 @@
 .leon-panel-close{background:rgba(255,255,255,.2);border:none;border-radius:50%;width:28px;height:28px;
   display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer;flex-shrink:0;}
 .leon-panel-body{flex:1;overflow-y:auto;padding:16px;background:#FBFCFE;}
-.leon-msg{display:flex;gap:10px;margin-bottom:16px;max-width:85%;}
-.leon-msg.me{margin-left:auto;flex-direction:row-reverse;}
-.leon-bubble{background:#F1F2F5;padding:11px 15px;border-radius:14px;font-size:13.5px;line-height:1.6;}
-.leon-msg.me .leon-bubble{background:#003E7E;color:#fff;}
+
+.leon-msg-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; width: 100%; max-width: 100%; }
+.leon-msg-group.me { align-items: flex-end; }
+
+.leon-msg{display:flex;gap:8px;width:100%;}
+.leon-msg.me{flex-direction:row-reverse;}
+
+/* --- Compact Formatted Bubble & Markdown Styles --- */
+.leon-bubble{background:#F1F2F5;padding:10px 14px;border-radius:14px;font-size:13.5px;line-height:1.45;color:#1e293b;word-break:break-word;max-width:82%;height:auto;min-height:fit-content;}
+.leon-bubble p{margin:0 0 6px 0;line-height:1.45;}
+.leon-bubble p:last-child{margin-bottom:0;}
+.leon-bubble ul, .leon-bubble ol{margin:4px 0 6px 0;padding-left:18px;}
+.leon-bubble li{margin-bottom:2px;}
+.leon-msg.me .leon-bubble{background:#1e40af;color:#fff;}
+
+/* --- Compact FAQ Quick Action Chips --- */
+.leon-faq-container {display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;padding-left:38px;max-width:88%;}
+.leon-faq-chip {
+  background:#ffffff;border:1px solid #1e40af;color:#1e40af;
+  padding:6px 12px;border-radius:14px;font-size:12px;font-weight:600;
+  cursor:pointer;transition:all 0.15s ease;text-align:center;
+  white-space:normal;line-height:1.2;
+}
+.leon-faq-chip:hover {
+  background:#1e40af;color:#ffffff;transform:translateY(-1px);
+  box-shadow:0 2px 6px rgba(30, 64, 175, 0.2);
+}
+
 .leon-av{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .leon-msg.me .leon-av{background:#F4B400;color:#00295a;font-weight:700;font-size:12px;}
 .leon-panel-input{display:flex;gap:8px;padding:12px;border-top:1px solid #E4E7ED;flex-shrink:0;background:#fff;}
@@ -44,9 +71,20 @@
 <script>
 (function(){
   let open = false;
-  let history = [{ role:'assistant', content:"Roar! I'm Leon, your StudiOUS assistant. Ask me about enrollment, applications, documents, payments, or graduation." }];
+  
+  // Clean initial greeting string without excessive newlines
+  let history = [{ 
+    role: 'assistant', 
+    content: "Roar! I'm Leon, your StudiOUS assistant. Select a topic below or ask me a question!" 
+  }];
 
-  // Procedurally-drawn lion face — same mascot as the prototype, no image file needed.
+  const faqList = [
+    "How to enroll?",
+    "Payment methods",
+    "Application requirements",
+    "Graduation application"
+  ];
+
   function lionFace(size){
     const r = size/2;
     let mane = '';
@@ -57,7 +95,6 @@
     }
     return `<svg width="${size}" height="${size}" viewBox="${-r} ${-r} ${size} ${size}" class="leon-face">
       <g>
-        <circle r="${r}" fill="#FFFFFF"/>
         ${mane}
         <circle r="${r*0.6}" fill="#FCE3B3"/>
         <circle cx="-${r*0.42}" cy="-${r*0.5}" r="${r*0.17}" fill="#F4B400"/>
@@ -68,6 +105,12 @@
         <path d="M-${r*0.02},${r*0.1} l${r*0.04},0 l-${r*0.02},${r*0.03} Z" fill="#8a5a2b"/>
       </g>
     </svg>`;
+  }
+
+  function renderContent(content, role) {
+    if (role === 'user') return escapeHtml(content);
+    if (window.marked) return marked.parse(content.trim());
+    return escapeHtml(content);
   }
 
   function render(){
@@ -92,10 +135,21 @@
         <button class="leon-panel-close" onclick="window.__leonToggle()">&times;</button>
       </div>
       <div class="leon-panel-body" id="leonBody">
-        ${history.map(m => `
-          <div class="leon-msg ${m.role==='user'?'me':''}">
-            <div class="leon-av">${m.role==='user' ? 'You' : lionFace(28)}</div>
-            <div class="leon-bubble">${escapeHtml(m.content)}</div>
+        ${history.map((m, index) => `
+          <div class="leon-msg-group ${m.role==='user'?'me':''}">
+            <div class="leon-msg ${m.role==='user'?'me':''}">
+              <div class="leon-av">${m.role==='user' ? 'You' : lionFace(28)}</div>
+              <div class="leon-bubble">${renderContent(m.content, m.role)}</div>
+            </div>
+            ${(index === 0 && m.role === 'assistant') ? `
+              <div class="leon-faq-container">
+                ${faqList.map(faq => `
+                  <button class="leon-faq-chip" onclick="window.__leonSendFaq('${escapeHtml(faq)}')">
+                    ${escapeHtml(faq)}
+                  </button>
+                `).join('')}
+              </div>
+            ` : ''}
           </div>`).join('')}
       </div>
       <div class="leon-panel-input">
@@ -117,18 +171,25 @@
     if(open) setTimeout(() => document.getElementById('leonInput')?.focus(), 50);
   };
 
+  window.__leonSendFaq = function(text) {
+    const input = document.getElementById('leonInput');
+    if (input) input.value = text;
+    window.__leonSend();
+  };
+
   window.__leonSend = async function(){
     const input = document.getElementById('leonInput');
+    if (!input) return;
     const val = input.value.trim();
     if(!val) return;
 
     history.push({ role:'user', content: val });
-    history.push({ role:'assistant', content: '…' }); // typing placeholder
+    history.push({ role:'assistant', content: '…' });
     input.value = '';
     render();
 
     try{
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/chatbot', {
         method:'POST',
         headers:{
           'Content-Type':'application/json',
@@ -136,7 +197,7 @@
         },
         body: JSON.stringify({
           message: val,
-          history: history.slice(0, -1).slice(-10), // last 10 turns, excluding the placeholder
+          history: history.slice(0, -1).slice(-10),
         }),
       });
       const data = await res.json();

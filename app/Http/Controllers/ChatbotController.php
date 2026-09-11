@@ -40,32 +40,75 @@ class ChatbotController extends Controller
         return response()->json(['reply' => $reply]);
     }
 
-    private function retrieveRelevantKnowledge(string $question, int $limit = 4)
+    private function retrieveRelevantKnowledge(string $userMessage, int $limit = 4)
     {
-        $keywords = collect(preg_split('/\s+/', strtolower($question)))
-            ->filter(fn ($w) => strlen($w) >= 3)
-            ->take(6);
+        $queryEmbedding = $this->getEmbedding($userMessage);
 
-        $query = ChatbotKnowledge::query();
-
-        if ($keywords->isNotEmpty()) {
-            $query->where(function ($q) use ($keywords) {
-                foreach ($keywords as $word) {
-                    $q->orWhere('question', 'like', "%{$word}%")
-                    ->orWhere('answer', 'like', "%{$word}%")
-                    ->orWhere('category', 'like', "%{$word}%");
-                }
-            });
-        }
-
-        $results = $query->limit($limit)->get(['question', 'answer', 'category']);
-
-        // If no specific keyword match is found, fetch top default articles
-        if ($results->isEmpty()) {
+        if (!$queryEmbedding) {
+            // Fallback to standard database fetch if embedding fails
             return ChatbotKnowledge::query()->limit($limit)->get(['question', 'answer', 'category']);
         }
 
-        return $results;
+        $articles = ChatbotKnowledge::whereNotNull('embedding')->get(['question', 'answer', 'category', 'embedding']);
+
+        if ($articles->isEmpty()) {
+            // Fallback if no embeddings are stored yet
+            return ChatbotKnowledge::query()->limit($limit)->get(['question', 'answer', 'category']);
+        }
+
+        $scoredArticles = $articles->map(function ($article) use ($queryEmbedding) {
+            $storedEmbedding = is_string($article->embedding) ? json_decode($article->embedding, true) : $article->embedding;
+            $article->similarity = $this->cosineSimilarity($queryEmbedding, $storedEmbedding ?? []);
+            return $article;
+        });
+
+        return $scoredArticles->sortByDesc('similarity')->take($limit);
+    }
+
+    private function getEmbedding(string $text): ?array
+    {
+        $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
+        $model = 'gemini-embedding-001';
+
+        try {
+            $response = Http::withoutVerifying()
+                ->withHeaders(['x-goog-api-key' => $apiKey])
+                ->timeout(65)
+                ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:embedContent", [
+                    'model' => "models/{$model}",
+                    'content' => [
+                        'parts' => [['text' => $text]]
+                    ]
+                ]);
+
+            if ($response->successful()) {
+                return $response->json('embedding.values');
+            }
+        } catch (\Throwable $e) {
+            Log::error('Embedding API connection timeout or error: ' . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    private function cosineSimilarity(array $vecA, array $vecB): float
+    {
+        if (empty($vecA) || empty($vecB) || count($vecA) !== count($vecB)) {
+            return 0.0;
+        }
+
+        $dotProduct = 0;
+        $normA = 0;
+        $normB = 0;
+
+        for ($i = 0; $i < count($vecA); $i++) {
+            $dotProduct += $vecA[$i] * $vecB[$i];
+            $normA += $vecA[$i] ** 2;
+            $normB += $vecB[$i] ** 2;
+        }
+
+        $denominator = sqrt($normA) * sqrt($normB);
+        return $denominator == 0 ? 0.0 : $dotProduct / $denominator;
     }
 
     private function buildSystemPrompt($articles): string
@@ -80,10 +123,12 @@ You are Leon, the friendly lion mascot and official AI assistant for PSU-StudiOU
 Provide clear, thorough, and well-detailed answers grounded ONLY in the knowledge base context provided below. Whenever applicable, structure your responses using distinct paragraphs, bullet points, or step-by-step lists to make instructions easy to follow.
 
 Strict Constraints:
-- Answer ONLY using the knowledge base context provided below. Never guess, extrapolate, or invent fees, dates, or university policies.
-- If the provided context does not contain enough information to answer fully, state clearly that you do not have that specific information yet and kindly direct the student to submit a Helpdesk ticket.
-- Never ask for, request, or reference a specific student's personal application status, payment details, or private account information—you have no access to live user records.
-- Always redirect account-specific, personal status, or private payment inquiries directly to the student portal Application Tracker or the Helpdesk.
+
+* Answer ONLY using the knowledge base context provided below. Never guess, extrapolate, or invent fees, dates, or university policies.
+* Do not include greetings or re-introductions in your replies, as the user has already been greeted when opening the assistant. Go straight to answering the question.
+* If the provided context does not contain enough information to answer fully, state clearly that you do not have that specific information yet and kindly direct the student to submit a Helpdesk ticket.
+* Never ask for, request, or reference a specific student's personal application status, payment details, or private account information—you have no access to live user records.
+* Always redirect account-specific, personal status, or private payment inquiries directly to the student portal Application Tracker or the Helpdesk.
 
 KNOWLEDGE BASE CONTEXT:
 {$context}
@@ -106,26 +151,31 @@ PROMPT;
             'parts' => [['text' => $userMessage]],
         ];
 
-        // Construct full URL with API key parameter
-        $baseUrl = config('services.ai.url');
-        $apiKey  = config('services.ai.key');
-        $endpoint = str_contains($baseUrl, '?') ? "{$baseUrl}&key={$apiKey}" : "{$baseUrl}?key={$apiKey}";
+        $payload = [
+            'systemInstruction' => [
+                'parts' => [['text' => $systemPrompt]]
+            ],
+            'contents' => $contents,
+            'generationConfig' => [
+                'maxOutputTokens' => 800,
+                'temperature'     => 0.3,
+            ]
+        ];
 
-        $response = Http::withoutVerifying()
-            ->withHeaders([
-                'Content-Type' => 'application/json',
-            ])
-            ->timeout(30)
-            ->post($endpoint, [
-                'systemInstruction' => [
-                    'parts' => [['text' => $systemPrompt]]
-                ],
-                'contents' => $contents,
-                'generationConfig' => [
-                    'maxOutputTokens' => 800,
-                    'temperature'     => 0.3,
-                ]
-            ]);
+        $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
+        
+        // Primary and fallback models
+        $primaryModel  = config('services.ai.model', 'gemini-3.6-flash');
+        $fallbackModel = 'gemini-3.5-flash';
+
+        // 1. Try sending request to Primary Model (3.6)
+        $response = $this->sendGeminiPost($primaryModel, $apiKey, $payload);
+
+        // 2. If rate limit is hit (429), automatically failover to Fallback Model (3.5)
+        if ($response->status() === 429) {
+            Log::warning("Gemini primary model ({$primaryModel}) hit rate limit (429). Retrying with fallback ({$fallbackModel}).");
+            $response = $this->sendGeminiPost($fallbackModel, $apiKey, $payload);
+        }
 
         if ($response->failed()) {
             throw new \RuntimeException('Gemini API returned status ' . $response->status() . ': ' . $response->body());
@@ -133,5 +183,18 @@ PROMPT;
 
         return $response->json('candidates.0.content.parts.0.text')
             ?? "I'm not sure how to answer that yet — please try rephrasing, or open a Helpdesk ticket.";
+    }
+
+    private function sendGeminiPost(string $model, string $apiKey, array $payload)
+    {
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent";
+
+        return Http::withoutVerifying()
+            ->withHeaders([
+                'Content-Type' => 'application/json',
+                'x-goog-api-key' => $apiKey
+            ])
+            ->timeout(65)
+            ->post($url, $payload);
     }
 }
