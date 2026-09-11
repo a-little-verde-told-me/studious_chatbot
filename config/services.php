@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'ai' => [
+        'key'   => env('AI_API_KEY'),
+        'url'   => env('AI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent'),
+        'model' => env('AI_MODEL', 'gemini-3.6-flash'),
+    ],
+
 ];
