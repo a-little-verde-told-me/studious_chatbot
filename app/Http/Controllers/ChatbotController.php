@@ -33,9 +33,7 @@ class ChatbotController extends Controller
             Log::warning('Leon chatbot API call failed: ' . $e->getMessage());
 
             return response()->json([
-                'reply'    => "I'm having trouble reaching my brain right now. "
-                            . "Please try again in a moment, or open a Helpdesk "
-                            . "ticket and our team will help directly.",
+                'reply'    => "I'm having trouble connecting to my knowledge base right now due to a network delay. Please come back and try again later, or open a Helpdesk ticket.",
                 'fallback' => true,
             ]);
         }
@@ -84,27 +82,80 @@ class ChatbotController extends Controller
         ];
 
         $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
-        $model = config('services.ai.model', 'gemini-3.6-flash');
+        $primaryModel = config('services.ai.model', 'gemini-3.6-flash');
+        $fallbackModel = 'gemini-3.5-flash';
 
-        return new StreamedResponse(function () use ($model, $apiKey, $payload) {
-            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:streamGenerateContent?alt=sse";
+        return new StreamedResponse(function () use ($primaryModel, $fallbackModel, $apiKey, $payload) {
+            try {
+                $url = "https://generativelanguage.googleapis.com/v1beta/models/{$primaryModel}:streamGenerateContent?alt=sse";
 
-            $response = Http::withoutVerifying()
-                ->withHeaders([
+                $http = Http::withHeaders([
                     'Content-Type' => 'application/json',
                     'x-goog-api-key' => $apiKey,
-                ])
-                ->timeout(65)
-                ->send('POST', $url, [
+                ])->timeout(65);
+
+                if (app()->environment('local')) {
+                    $http->withoutVerifying();
+                }
+
+                $response = $http->send('POST', $url, [
                     'json' => $payload,
                     'stream' => true,
                 ]);
 
-            $body = $response->toPsrResponse()->getBody();
+                if ($response->status() === 429) {
+                    Log::warning("Gemini streaming primary model ({$primaryModel}) hit rate limit (429). Retrying with fallback ({$fallbackModel}).");
+                    
+                    sleep(2);
 
-            while (!$body->eof()) {
-                $chunk = $body->read(1024);
-                echo $chunk;
+                    $fallbackUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$fallbackModel}:streamGenerateContent?alt=sse";
+                    
+                    $fallbackHttp = Http::withHeaders([
+                        'Content-Type' => 'application/json',
+                        'x-goog-api-key' => $apiKey,
+                    ])->timeout(65);
+
+                    if (app()->environment('local')) {
+                        $fallbackHttp->withoutVerifying();
+                    }
+
+                    $response = $fallbackHttp->send('POST', $fallbackUrl, [
+                        'json' => $payload,
+                        'stream' => true,
+                    ]);
+                }
+
+                if ($response->failed()) {
+                    throw new \RuntimeException('Gemini stream API returned status ' . $response->status());
+                }
+
+                $body = $response->toPsrResponse()->getBody();
+
+                while (!$body->eof()) {
+                    $chunk = $body->read(1024);
+                    echo $chunk;
+                    if (ob_get_level() > 0) {
+                        ob_flush();
+                    }
+                    flush();
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Leon chatbot stream connection failed: ' . $e->getMessage());
+
+                $fallbackText = "I'm having trouble connecting right now due to a network issue. Please come back and try again later!";
+                $fallbackData = json_encode([
+                    "candidates" => [
+                        [
+                            "content" => [
+                                "parts" => [
+                                    ["text" => $fallbackText]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]);
+
+                echo "data: " . $fallbackData . "\n\n";
                 if (ob_get_level() > 0) {
                     ob_flush();
                 }
@@ -146,15 +197,18 @@ class ChatbotController extends Controller
         $model = 'gemini-embedding-001';
 
         try {
-            $response = Http::withoutVerifying()
-                ->withHeaders(['x-goog-api-key' => $apiKey])
-                ->timeout(65)
-                ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:embedContent", [
-                    'model' => "models/{$model}",
-                    'content' => [
-                        'parts' => [['text' => $text]]
-                    ]
-                ]);
+            $http = Http::withHeaders(['x-goog-api-key' => $apiKey])->timeout(65);
+
+            if (app()->environment('local')) {
+                $http->withoutVerifying();
+            }
+
+            $response = $http->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:embedContent", [
+                'model' => "models/{$model}",
+                'content' => [
+                    'parts' => [['text' => $text]]
+                ]
+            ]);
 
             if ($response->successful()) {
                 return $response->json('embedding.values');
@@ -199,6 +253,7 @@ Provide clear, thorough, and well-detailed answers grounded ONLY in the knowledg
 
 Strict Constraints:
 
+* If the user sends a casual greeting (e.g., "hi", "hello", "hey", "good morning") without asking a specific question, ignore the knowledge base context and respond warmly as Leon, briefly welcoming them and asking how you can help with their PSU-StudiOUS concerns today.
 * Answer ONLY using the knowledge base context provided below. Never guess, extrapolate, or invent fees, dates, or university policies.
 * Do not include greetings or re-introductions in your replies, as the user has already been greeted when opening the assistant. Go straight to answering the question.
 * If the provided context does not contain enough information to answer fully, state clearly that you do not have that specific information yet and kindly direct the student to submit a Helpdesk ticket.
@@ -261,12 +316,15 @@ PROMPT;
     {
         $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent";
 
-        return Http::withoutVerifying()
-            ->withHeaders([
-                'Content-Type' => 'application/json',
-                'x-goog-api-key' => $apiKey
-            ])
-            ->timeout(65)
-            ->post($url, $payload);
+        $http = Http::withHeaders([
+            'Content-Type' => 'application/json',
+            'x-goog-api-key' => $apiKey
+        ])->timeout(65);
+
+        if (app()->environment('local')) {
+            $http->withoutVerifying();
+        }
+
+        return $http->post($url, $payload);
     }
 }

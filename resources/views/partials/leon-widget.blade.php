@@ -55,13 +55,18 @@
   background:#1e40af;color:#ffffff;transform:translateY(-1px);
   box-shadow:0 2px 6px rgba(30, 64, 175, 0.2);
 }
+.leon-faq-chip.disabled {
+  opacity: 0.5; pointer-events: none; cursor: not-allowed;
+}
 
 .leon-av{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .leon-msg.me .leon-av{background:#F4B400;color:#00295a;font-weight:700;font-size:12px;}
 .leon-panel-input{display:flex;gap:8px;padding:12px;border-top:1px solid #E4E7ED;flex-shrink:0;background:#fff;}
 .leon-panel-input input{flex:1;padding:10px 14px;border:1px solid #E4E7ED;border-radius:9px;font-size:14px;outline:none;}
+.leon-panel-input input:disabled{background:#f8fafc;cursor:not-allowed;}
 .leon-panel-input button{background:#1e40af;color:#fff;border:none;border-radius:9px;width:38px;
   display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+.leon-panel-input button:disabled{opacity:0.5;cursor:not-allowed;}
 @media(max-width:600px){
   .leon-panel{right:12px;left:12px;width:auto;bottom:96px;}
   .leon-fab{right:16px;bottom:16px;}
@@ -71,6 +76,7 @@
 <script>
 (function(){
   let open = false;
+  let isStreaming = false;
   
   let history = [{ 
     role: 'assistant', 
@@ -144,7 +150,7 @@
             ${(index === 0 && m.role === 'assistant') ? `
               <div class="leon-faq-container">
                 ${faqList.map(faq => `
-                  <button class="leon-faq-chip" onclick="window.__leonSendFaq('${escapeHtml(faq)}')">
+                  <button class="leon-faq-chip ${isStreaming ? 'disabled' : ''}" onclick="window.__leonSendFaq('${escapeHtml(faq)}')">
                     ${escapeHtml(faq)}
                   </button>
                 `).join('')}
@@ -153,8 +159,8 @@
           </div>`).join('')}
       </div>
       <div class="leon-panel-input">
-        <input id="leonInput" placeholder="Ask Leon something..." onkeydown="if(event.key==='Enter') window.__leonSend()">
-        <button onclick="window.__leonSend()">&#10148;</button>
+        <input id="leonInput" placeholder="${isStreaming ? 'Leon is thinking...' : 'Ask Leon something...'}" ${isStreaming ? 'disabled' : ''} onkeydown="if(event.key==='Enter') window.__leonSend()">
+        <button ${isStreaming ? 'disabled' : ''} onclick="window.__leonSend()">&#10148;</button>
       </div>
     </div>`;
   }
@@ -165,31 +171,6 @@
     return d.innerHTML;
   }
 
-  function parseGeminiChunk(chunk) {
-    let textAccumulator = '';
-    const lines = chunk.split('\n');
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const jsonStr = line.substring(6).trim();
-        if (!jsonStr) continue;
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const parts = parsed.candidates?.[0]?.content?.parts;
-          if (parts && Array.isArray(parts)) {
-            for (const part of parts) {
-              if (part.text) {
-                textAccumulator += part.text;
-              }
-            }
-          }
-        } catch (e) {
-          // Ignore incomplete chunk parsing lines
-        }
-      }
-    }
-    return textAccumulator;
-  }
-
   window.__leonToggle = function(){
     open = !open;
     render();
@@ -197,17 +178,21 @@
   };
 
   window.__leonSendFaq = function(text) {
+    if (isStreaming) return;
     const input = document.getElementById('leonInput');
     if (input) input.value = text;
     window.__leonSend();
   };
 
   window.__leonSend = async function(){
+    if (isStreaming) return;
+    
     const input = document.getElementById('leonInput');
     if (!input) return;
     const val = input.value.trim();
     if(!val) return;
 
+    isStreaming = true;
     history.push({ role:'user', content: val });
     history.push({ role:'assistant', content: '…' });
     input.value = '';
@@ -228,13 +213,23 @@
         })
       });
 
+      if (response.status === 429) {
+        history[history.length - 1] = {
+          role: 'assistant',
+          content: "You're sending messages too fast. Please wait a moment."
+        };
+        isStreaming = false;
+        render();
+        return;
+      }
+
       if (!response.ok) throw new Error('Stream request failed');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let assistantMessage = '';
+      let rawBuffer = '';
       
-      // Clear initial loading dots indicator on first token arrival
       history[history.length - 1].content = '';
 
       while (true) {
@@ -242,19 +237,56 @@
         if (done) break;
         
         const chunk = decoder.decode(value, { stream: true });
-        const parsedText = parseGeminiChunk(chunk);
+        rawBuffer += chunk;
+
+        // Check if Gemini API returned a quota or error JSON object in the stream
+        if (rawBuffer.includes('RESOURCE_EXHAUSTED') || rawBuffer.includes('"error":')) {
+          try {
+            const errJson = JSON.parse(rawBuffer);
+            if (errJson.error) {
+              assistantMessage = "⚠️ Gemini API Quota Exceeded (429). Please wait a moment or check your Google AI Studio plan limits.";
+              break;
+            }
+          } catch(e) {
+            // Wait for full JSON payload if it's still streaming chunks
+          }
+        }
+
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.substring(6).trim();
+            if (!jsonStr) continue;
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const parts = parsed.candidates?.[0]?.content?.parts;
+              if (parts && Array.isArray(parts)) {
+                for (const part of parts) {
+                  if (part.text) assistantMessage += part.text;
+                }
+              }
+            } catch (e) {}
+          }
+        }
         
-        if (parsedText) {
-          assistantMessage += parsedText;
+        if (assistantMessage) {
           history[history.length - 1].content = assistantMessage;
           render();
         }
       }
+
+      if (!assistantMessage) {
+        history[history.length - 1].content = "⚠️ Gemini API Quota Exceeded (429). Please try again later.";
+        render();
+      }
+
     } catch(err) {
       history[history.length - 1] = {
         role: 'assistant',
         content: "I'm having trouble connecting right now. Please try again, or open a Helpdesk ticket.",
       };
+    } finally {
+      isStreaming = false;
       render();
     }
   };
