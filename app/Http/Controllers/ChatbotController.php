@@ -11,6 +11,8 @@ class ChatbotController extends Controller
 {
     public function respond(Request $request)
     {
+        set_time_limit(120);
+
         $validated = $request->validate([
             'message'           => 'required|string|max:1000',
             'history'           => 'array|max:20',
@@ -120,7 +122,7 @@ class ChatbotController extends Controller
         return <<<PROMPT
 You are Leon, the friendly lion mascot and official AI assistant for PSU-StudiOUS (Pangasinan State University Open University Systems portal).
 
-Provide clear, thorough, and well-detailed answers grounded ONLY in the knowledge base context provided below. Whenever applicable, structure your responses using distinct paragraphs, bullet points, or step-by-step lists to make instructions easy to follow.
+Provide clear, thorough, and well-detailed answers grounded ONLY in the knowledge base context provided below. Whenever applicable, structure your responses using distinct paragraphs, bullet points, or step-by-step lists to make instructions easy to follow. Also if needed provide links to relevant sections of the PSU-StudiOUS portal or other resources for further guidance. Avoid repeating the same information multiple times in a single response.
 
 Strict Constraints:
 
@@ -157,7 +159,7 @@ PROMPT;
             ],
             'contents' => $contents,
             'generationConfig' => [
-                'maxOutputTokens' => 800,
+                'maxOutputTokens' => 1500,
                 'temperature'     => 0.3,
             ]
         ];

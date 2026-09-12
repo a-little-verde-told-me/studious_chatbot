@@ -108,10 +108,11 @@
   }
 
   function renderContent(content, role) {
-    if (role === 'user') return escapeHtml(content);
-    if (window.marked) return marked.parse(content.trim());
-    return escapeHtml(content);
-  }
+      if (!content) return ''; // Safely handle undefined, null, or empty content
+      if (role === 'user') return escapeHtml(content);
+      if (window.marked) return marked.parse(content.trim());
+      return escapeHtml(content);
+    }
 
   function render(){
     const root = document.getElementById('leon-widget-root');
