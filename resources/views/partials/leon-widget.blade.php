@@ -72,7 +72,6 @@
 (function(){
   let open = false;
   
-  // Clean initial greeting string without excessive newlines
   let history = [{ 
     role: 'assistant', 
     content: "Roar! I'm Leon, your StudiOUS assistant. Select a topic below or ask me a question!" 
@@ -108,7 +107,7 @@
   }
 
   function renderContent(content, role) {
-      if (!content) return ''; // Safely handle undefined, null, or empty content
+      if (!content) return ''; 
       if (role === 'user') return escapeHtml(content);
       if (window.marked) return marked.parse(content.trim());
       return escapeHtml(content);
@@ -166,6 +165,31 @@
     return d.innerHTML;
   }
 
+  function parseGeminiChunk(chunk) {
+    let textAccumulator = '';
+    const lines = chunk.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const jsonStr = line.substring(6).trim();
+        if (!jsonStr) continue;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const parts = parsed.candidates?.[0]?.content?.parts;
+          if (parts && Array.isArray(parts)) {
+            for (const part of parts) {
+              if (part.text) {
+                textAccumulator += part.text;
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore incomplete chunk parsing lines
+        }
+      }
+    }
+    return textAccumulator;
+  }
+
   window.__leonToggle = function(){
     open = !open;
     render();
@@ -189,27 +213,50 @@
     input.value = '';
     render();
 
-    try{
-      const res = await fetch('/api/chatbot', {
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    try {
+      const response = await fetch('/api/chatbot/stream', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'X-CSRF-TOKEN': csrfToken 
         },
         body: JSON.stringify({
           message: val,
-          history: history.slice(0, -1).slice(-10),
-        }),
+          history: history.slice(0, -2).slice(-10),
+        })
       });
-      const data = await res.json();
-      history[history.length - 1] = { role:'assistant', content: data.reply };
-    }catch(err){
+
+      if (!response.ok) throw new Error('Stream request failed');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantMessage = '';
+      
+      // Clear initial loading dots indicator on first token arrival
+      history[history.length - 1].content = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const parsedText = parseGeminiChunk(chunk);
+        
+        if (parsedText) {
+          assistantMessage += parsedText;
+          history[history.length - 1].content = assistantMessage;
+          render();
+        }
+      }
+    } catch(err) {
       history[history.length - 1] = {
-        role:'assistant',
+        role: 'assistant',
         content: "I'm having trouble connecting right now. Please try again, or open a Helpdesk ticket.",
       };
+      render();
     }
-    render();
   };
 
   document.addEventListener('DOMContentLoaded', render);

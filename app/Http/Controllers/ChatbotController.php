@@ -6,6 +6,7 @@ use App\Models\ChatbotKnowledge;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatbotController extends Controller
 {
@@ -14,10 +15,10 @@ class ChatbotController extends Controller
         set_time_limit(120);
 
         $validated = $request->validate([
-            'message'           => 'required|string|max:1000',
-            'history'           => 'array|max:20',
-            'history.*.role'    => 'in:user,assistant',
-            'history.*.content' => 'string|max:2000',
+            'message'             => 'required|string|max:1000',
+            'history'             => 'array|max:20',
+            'history.*.role'      => 'in:user,assistant',
+            'history.*.content'   => 'string|max:2000',
         ]);
 
         $userMessage = trim($validated['message']);
@@ -42,19 +43,91 @@ class ChatbotController extends Controller
         return response()->json(['reply' => $reply]);
     }
 
+    public function streamRespond(Request $request)
+    {
+        set_time_limit(120);
+
+        $validated = $request->validate([
+            'message'             => 'required|string|max:1000',
+            'history'             => 'array|max:20',
+            'history.*.role'      => 'in:user,assistant',
+            'history.*.content'   => 'string|max:2000',
+        ]);
+
+        $userMessage = trim($validated['message']);
+        $history     = $validated['history'] ?? [];
+
+        $relevantArticles = $this->retrieveRelevantKnowledge($userMessage);
+        $systemPrompt     = $this->buildSystemPrompt($relevantArticles);
+
+        $contents = [];
+        foreach ($history as $turn) {
+            $contents[] = [
+                'role'  => $turn['role'] === 'assistant' ? 'model' : 'user',
+                'parts' => [['text' => $turn['content']]],
+            ];
+        }
+        $contents[] = [
+            'role'  => 'user',
+            'parts' => [['text' => $userMessage]],
+        ];
+
+        $payload = [
+            'systemInstruction' => [
+                'parts' => [['text' => $systemPrompt]]
+            ],
+            'contents' => $contents,
+            'generationConfig' => [
+                'maxOutputTokens' => 1500,
+                'temperature'     => 0.3,
+            ]
+        ];
+
+        $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
+        $model = config('services.ai.model', 'gemini-3.6-flash');
+
+        return new StreamedResponse(function () use ($model, $apiKey, $payload) {
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:streamGenerateContent?alt=sse";
+
+            $response = Http::withoutVerifying()
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                    'x-goog-api-key' => $apiKey,
+                ])
+                ->timeout(65)
+                ->send('POST', $url, [
+                    'json' => $payload,
+                    'stream' => true,
+                ]);
+
+            $body = $response->toPsrResponse()->getBody();
+
+            while (!$body->eof()) {
+                $chunk = $body->read(1024);
+                echo $chunk;
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
+                flush();
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
     private function retrieveRelevantKnowledge(string $userMessage, int $limit = 4)
     {
         $queryEmbedding = $this->getEmbedding($userMessage);
 
         if (!$queryEmbedding) {
-            // Fallback to standard database fetch if embedding fails
             return ChatbotKnowledge::query()->limit($limit)->get(['question', 'answer', 'category']);
         }
 
         $articles = ChatbotKnowledge::whereNotNull('embedding')->get(['question', 'answer', 'category', 'embedding']);
 
         if ($articles->isEmpty()) {
-            // Fallback if no embeddings are stored yet
             return ChatbotKnowledge::query()->limit($limit)->get(['question', 'answer', 'category']);
         }
 
@@ -166,14 +239,11 @@ PROMPT;
 
         $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
         
-        // Primary and fallback models
         $primaryModel  = config('services.ai.model', 'gemini-3.6-flash');
         $fallbackModel = 'gemini-3.5-flash';
 
-        // 1. Try sending request to Primary Model (3.6)
         $response = $this->sendGeminiPost($primaryModel, $apiKey, $payload);
 
-        // 2. If rate limit is hit (429), automatically failover to Fallback Model (3.5)
         if ($response->status() === 429) {
             Log::warning("Gemini primary model ({$primaryModel}) hit rate limit (429). Retrying with fallback ({$fallbackModel}).");
             $response = $this->sendGeminiPost($fallbackModel, $apiKey, $payload);
