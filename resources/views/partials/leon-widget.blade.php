@@ -43,6 +43,35 @@
 .leon-bubble li{margin-bottom:2px;}
 .leon-msg.me .leon-bubble{background:#1e40af;color:#fff;}
 
+/* --- Animated Ellipsis Typing Indicator --- */
+.leon-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 2px;
+}
+.leon-typing .dot {
+  width: 7px;
+  height: 7px;
+  background-color: #64748b;
+  border-radius: 50%;
+  animation: leonDotBounce 1.4s infinite ease-in-out both;
+}
+.leon-typing .dot:nth-child(1) { animation-delay: 0s; }
+.leon-typing .dot:nth-child(2) { animation-delay: 0.2s; }
+.leon-typing .dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes leonDotBounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
 /* --- Compact FAQ Quick Action Chips --- */
 .leon-faq-container {display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;padding-left:38px;max-width:88%;}
 .leon-faq-chip {
@@ -115,6 +144,16 @@
   function renderContent(content, role) {
       if (!content) return ''; 
       if (role === 'user') return escapeHtml(content);
+      
+      // Render animated bouncing ellipsis indicator while loading initial response chunk
+      if (content === '…') {
+        return `<div class="leon-typing">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>`;
+      }
+
       if (window.marked) return marked.parse(content.trim());
       return escapeHtml(content);
     }
@@ -230,8 +269,6 @@
       let assistantMessage = '';
       let rawBuffer = '';
       
-      history[history.length - 1].content = '';
-
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
