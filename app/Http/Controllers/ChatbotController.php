@@ -25,7 +25,23 @@ class ChatbotController extends Controller
         $history     = $validated['history'] ?? [];
 
         $relevantArticles = $this->retrieveRelevantKnowledge($userMessage);
-        $systemPrompt     = $this->buildSystemPrompt($relevantArticles);
+
+        $topMatch = $relevantArticles->first();
+        
+        $similarity = $topMatch->similarity ?? 'NO_SIMILARITY_PROPERTY';
+
+        // Temporary Debug Log
+        Log::info("Chatbot Debug - Message: '{$userMessage}' | Top Similarity: {$similarity}");
+
+        // Fix: Triggers log if no match, if similarity property doesn't exist (fallback), or if similarity is under 0.40
+        $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topMatch->similarity < 0.40;
+
+        if (count(explode(' ', trim($userMessage))) > 1) {
+                $this->logUnhandledQuery($userMessage, $request);
+            }
+    
+
+        $systemPrompt = $this->buildSystemPrompt($relevantArticles);
 
         try {
             $reply = $this->callAiApi($systemPrompt, $history, $userMessage);
@@ -56,7 +72,23 @@ class ChatbotController extends Controller
         $history     = $validated['history'] ?? [];
 
         $relevantArticles = $this->retrieveRelevantKnowledge($userMessage);
-        $systemPrompt     = $this->buildSystemPrompt($relevantArticles);
+
+        $topMatch = $relevantArticles->first();
+
+        $similarity = $topMatch->similarity ?? 'NO_SIMILARITY_PROPERTY';
+
+        // Temporary Debug Log
+        Log::info("Chatbot Debug - Message: '{$userMessage}' | Top Similarity: {$similarity}");
+
+        // Fix: Triggers log if no match, if similarity property doesn't exist (fallback), or if similarity is under 0.40
+        $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topMatch->similarity < 0.40;
+
+        if (count(explode(' ', trim($userMessage))) > 1) {
+                $this->logUnhandledQuery($userMessage, $request);
+            }
+        
+
+        $systemPrompt = $this->buildSystemPrompt($relevantArticles);
 
         $contents = [];
         foreach ($history as $turn) {
@@ -327,4 +359,17 @@ PROMPT;
 
         return $http->post($url, $payload);
     }
+    
+    private function logUnhandledQuery(string $message, Request $request): void
+    {
+        try {
+            \App\Models\UnhandledChatbotQuery::forceCreate([
+                'user_message' => $message,
+                'ip_address'   => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Failed logging unhandled query to DB: ' . $e->getMessage());
+        }
+    }
+    
 }

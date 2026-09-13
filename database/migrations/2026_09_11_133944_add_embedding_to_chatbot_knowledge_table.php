@@ -1,39 +1,22 @@
 <?php
 
-namespace App\Observers;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
-use App\Models\ChatbotKnowledge;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-
-class ChatbotKnowledgeObserver
+return new class extends Migration
 {
-    public function creating(ChatbotKnowledge $chatbotKnowledge)
+    public function up(): void
     {
-        // Combine question and answer to give the embedding full context
-        $textToEmbed = "Q: " . $chatbotKnowledge->question . "\nA: " . $chatbotKnowledge->answer;
-        
-        $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
-        $model = 'gemini-embedding-001';
-
-        try {
-            $response = Http::withoutVerifying()
-                ->withHeaders(['x-goog-api-key' => $apiKey])
-                ->timeout(30)
-                ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:embedContent", [
-                    'model' => "models/{$model}",
-                    'content' => [
-                        'parts' => [['text' => $textToEmbed]]
-                    ]
-                ]);
-
-            if ($response->successful()) {
-                $vector = $response->json('embedding.values');
-                // Automatically assign the JSON-encoded vector to the embedding column
-                $chatbotKnowledge->embedding = json_encode($vector);
-            }
-        } catch (\Throwable $e) {
-            Log::error('Failed to auto-generate embedding on create: ' . $e->getMessage());
-        }
+        Schema::table('chatbot_knowledge', function (Blueprint $table) {
+            $table->json('embedding')->nullable()->after('answer');
+        });
     }
-}
+
+    public function down(): void
+    {
+        Schema::table('chatbot_knowledge', function (Blueprint $table) {
+            $table->dropColumn('embedding');
+        });
+    }
+};
