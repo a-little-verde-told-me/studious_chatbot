@@ -3,12 +3,19 @@
 namespace Database\Seeders;
 
 use App\Models\ChatbotKnowledge;
+use App\Http\Controllers\ChatbotController;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Log;
 
 class ChatbotKnowledgeSeeder extends Seeder
 {
     public function run(): void
     {
+        // Use reflection to call the private getEmbedding method from ChatbotController
+        $controller = new ChatbotController();
+        $reflector  = new \ReflectionMethod($controller, 'getEmbedding');
+        $reflector->setAccessible(true);
+
         $rows = [
             ['category' => 'Enrollment', 'question' => 'How do I enroll for the semester?',
              'answer' => 'Log in to your account during the enrollment period shown on the Academic Calendar, then coordinate with your program coordinator for adviser assignment. Enrollment status is confirmed once your fees are settled.'],
@@ -39,7 +46,22 @@ class ChatbotKnowledgeSeeder extends Seeder
         ];
 
         foreach ($rows as $row) {
-            ChatbotKnowledge::create($row);
+            // Generate the embedding vector via Gemini API
+            $embedding = $reflector->invoke($controller, $row['question']);
+
+            if (!$embedding) {
+                Log::warning("Seeder failed to generate embedding for: {$row['question']}");
+            }
+
+            ChatbotKnowledge::create([
+                'category'  => $row['category'],
+                'question'  => $row['question'],
+                'answer'    => $row['answer'],
+                'embedding' => $embedding ? json_encode($embedding) : null,
+            ]);
+
+            // Brief pause to prevent hitting API rate limits during seeding
+            usleep(200000); 
         }
     }
 }

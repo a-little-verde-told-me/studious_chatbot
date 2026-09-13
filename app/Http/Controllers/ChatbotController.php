@@ -27,19 +27,17 @@ class ChatbotController extends Controller
         $relevantArticles = $this->retrieveRelevantKnowledge($userMessage);
 
         $topMatch = $relevantArticles->first();
-        
-        $similarity = $topMatch->similarity ?? 'NO_SIMILARITY_PROPERTY';
+        $topSimilarity = isset($topMatch->similarity) ? (float) $topMatch->similarity : 0.0;
 
-        // Temporary Debug Log
-        Log::info("Chatbot Debug - Message: '{$userMessage}' | Top Similarity: {$similarity}");
+        Log::info("Chatbot Log Check - Message: '{$userMessage}' | Similarity: {$topSimilarity}");
 
-        // Fix: Triggers log if no match, if similarity property doesn't exist (fallback), or if similarity is under 0.40
-        $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topMatch->similarity < 0.40;
+        // Flag as low similarity if score is under 0.65 or if no match exists
+        $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topSimilarity < 0.65;
 
-        if (count(explode(' ', trim($userMessage))) > 1) {
-                $this->logUnhandledQuery($userMessage, $request);
-            }
-    
+        // Log ONLY if vector similarity is low AND message passes noise/greeting checks
+        if ($hasLowSimilarity && $this->isLoggableInquiry($userMessage)) {
+            $this->logUnhandledQuery($userMessage, $request);
+        }
 
         $systemPrompt = $this->buildSystemPrompt($relevantArticles);
 
@@ -74,19 +72,16 @@ class ChatbotController extends Controller
         $relevantArticles = $this->retrieveRelevantKnowledge($userMessage);
 
         $topMatch = $relevantArticles->first();
+        $topSimilarity = isset($topMatch->similarity) ? (float) $topMatch->similarity : 0.0;
 
-        $similarity = $topMatch->similarity ?? 'NO_SIMILARITY_PROPERTY';
+        Log::info("Chatbot Log Check - Message: '{$userMessage}' | Similarity: {$topSimilarity}");
 
-        // Temporary Debug Log
-        Log::info("Chatbot Debug - Message: '{$userMessage}' | Top Similarity: {$similarity}");
+        $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topSimilarity < 0.65;
 
-        // Fix: Triggers log if no match, if similarity property doesn't exist (fallback), or if similarity is under 0.40
-        $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topMatch->similarity < 0.40;
-
-        if (count(explode(' ', trim($userMessage))) > 1) {
-                $this->logUnhandledQuery($userMessage, $request);
-            }
-        
+        // Log ONLY if vector similarity is low AND message passes noise/greeting checks
+        if ($hasLowSimilarity && $this->isLoggableInquiry($userMessage)) {
+            $this->logUnhandledQuery($userMessage, $request);
+        }
 
         $systemPrompt = $this->buildSystemPrompt($relevantArticles);
 
@@ -229,7 +224,9 @@ class ChatbotController extends Controller
         $model = 'gemini-embedding-001';
 
         try {
-            $http = Http::withHeaders(['x-goog-api-key' => $apiKey])->timeout(65);
+            $http = Http::withHeaders(['x-goog-api-key' => $apiKey])
+                ->timeout(15)
+                ->connectTimeout(10);
 
             if (app()->environment('local')) {
                 $http->withoutVerifying();
@@ -372,4 +369,32 @@ PROMPT;
         }
     }
     
+    private function isLoggableInquiry(string $message): bool
+    {
+        $clean = strtolower(trim($message));
+        $cleanNormalized = preg_replace('/[^\p{L}\p{N}\s]/u', '', $clean);
+        $words = array_values(array_filter(explode(' ', $cleanNormalized)));
+
+        // Rule 1: Ignore ultra-short noise or single-word inputs (e.g., "ok", "lol", "hi", "thanks")
+        if (count($words) < 2) {
+            return false;
+        }
+
+        // Rule 2: Ignore pure greetings and casual conversational small talk sentences
+        $pureGreetings = [
+            'hi', 'hello', 'hey', 'greetings', 'good morning', 
+            'good afternoon', 'good evening', 'how are you', 
+            'how are you doing', 'what is up', 'sup', 'how is it going'
+        ];
+
+        if (count($words) <= 5) {
+            foreach ($pureGreetings as $greeting) {
+                if (str_contains($clean, $greeting) && count($words) <= 3) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
 }
