@@ -114,9 +114,9 @@
 
   const faqList = [
     "How to enroll?",
-    "Payment methods",
+    "What are the payment methods?",
     "Application requirements",
-    "Graduation application"
+    "How to Request a Document?"
   ];
 
   function lionFace(size){
