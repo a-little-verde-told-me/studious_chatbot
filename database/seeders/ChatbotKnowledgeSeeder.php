@@ -22,8 +22,32 @@ class ChatbotKnowledgeSeeder extends Seeder
             ['category' => 'General', 'question' => 'What are OUS office hours?',
              'answer' => 'The Open University Systems Office is available Monday to Saturday, 8:00 AM to 5:00 PM, for all services.'],
  
-            ['category' => 'Payments', 'question' => 'How do I pay for OUS services?',
-             'answer' => 'You can pay online through LandBank\'s Link.BizPortal (lbp-eservices.com/egps/portal/Merchants.jsp), or pay in person at the Cashier if you\'re a walk-in student. Either way, staff will verify your receipt or reference number before your request is processed.'],
+            [
+            'category' => 'Payments',
+            'question' => 'How do I pay for OUS services?',
+            'answer'   => "You can pay for OUS services through two main channels:
+
+            1. **Online Payment:** Via [LandBank's Link.BizPortal](https://www.lbp-eservices.com/egps/portal/index.jsp) (Select **PANGASINAN STATE UNIVERSITY - LINGAYEN** as the Merchant Name).
+            2. **In-Person Payment:** Pay directly at the Cashier's Office on campus.
+
+            After paying, make sure to save your receipt or reference number for verification."
+            ],
+
+            [
+            'category' => 'Payments',
+            'question' => 'How do I submit or verify my payment receipt?',
+            'answer'   => "After paying for your request or application, submit your receipt or reference number based on how you applied:
+
+            - **StudiOUS Portal Requests or Applications:** Upload your receipt or reference number directly within the portal before submitting your request.
+            - **Non-Portal Requests or Applications:** Send a photo or copy of your receipt to your Program In-Charge via Facebook Messenger.
+            - **Walk-in Requests:** Submit your physical receipt directly to the OUS Office staff, or take a photo of it and send it to your Program In-Charge via Facebook Messenger."
+            ],
+
+            [
+                'category' => 'Payments',
+                'question' => 'What merchant name should I select on LandBank Link.BizPortal?',
+                'answer'   => "When paying online via [LandBank's Link.BizPortal](https://www.lbp-eservices.com/egps/portal/index.jsp), search and select **PANGASINAN STATE UNIVERSITY - LINGAYEN** as the Merchant Name."
+            ],
  
             // ================= COMPREHENSIVE EXAMINATION =================
             ['category' => 'Applications', 'question' => 'What are the requirements for the Comprehensive Examination application?',
@@ -126,7 +150,7 @@ class ChatbotKnowledgeSeeder extends Seeder
  
             // ---------------- Applications (general) ----------------
             ['category' => 'Using StudiOUS', 'question' => 'Do I still need to visit the office in person to submit an application?',
-             'answer' => "No — with StudiOUS, you submit your application, upload your requirements, and pay online without visiting the Program In-Charge in person. You'll only need to be on campus for things that are inherently physical, like your actual defense or claiming a printed Diploma."],
+             'answer' => "No — with StudiOUS, you submit your application, upload your requirements, and pay online without visiting the Program In-Charge in person. You'll only need to be on campus for things that are inherently physical, like your actual defense (if you chose to conduct it on-site) or claiming a printed Diploma."],
  
             ['category' => 'Using StudiOUS', 'question' => 'How is applying through StudiOUS different from the old process?',
              'answer' => "The requirements, fees, and processing times from the Citizen's Charter still apply — that's policy and it hasn't changed. What's different is how you interact with the office: instead of visiting the Program In-Charge to release a paper form, you fill out the application online, upload requirements as files, and follow every status update yourself in your Application Tracker instead of waiting to be told in person."],
@@ -135,14 +159,14 @@ class ChatbotKnowledgeSeeder extends Seeder
              'answer' => 'Yes — the fees, requirements, and processing times in the Citizen\'s Charter are still the official policy. StudiOUS only changes how you submit, pay, and track these services, not what\'s required or how much they cost.'],
  
             ['category' => 'Using StudiOUS', 'question' => 'What application statuses will I see, and what do they mean?',
-             'answer' => "Submitted (received, not yet paid), Payment Verification (staff checking your receipt/reference), Under Review (staff checking your requirements), Returned (something needs fixing — check the remarks), Approved (requirements and payment cleared), Reschedule Requested (your proposed date wasn't approved), Scheduled (your date is confirmed), Completed (your defense/exam is done), or Rejected."],
+             'answer' => "Submitted (received, not yet paid), Under Review (staff checking your requirements and receipt/reference), Returned (something needs fixing — check the remarks), Approved (requirements and payment cleared), Reschedule Requested (your proposed date wasn't approved), Scheduled (your date is confirmed), Completed (your defense/exam is done), or Rejected."],
  
             ['category' => 'Using StudiOUS', 'question' => 'Do I still need to bring my requirements in person?',
              'answer' => 'For most requirements, no — you upload them as files directly when you submit your application. You may still need to present an original document in person in specific cases where the office requires the physical copy, such as claiming a printed Diploma or OTR.'],
  
             // ---------------- Applications: the new scheduling flow ----------------
             ['category' => 'Applications', 'question' => 'How do I choose my defense schedule now?',
-             'answer' => "This is new to StudiOUS: instead of asking your Program In-Charge for an available date in person, you propose your own preferred date and time for your Comprehensive Exam, Title Defense, Proposal Defense, or Final Defense directly when you submit your application. Staff then reviews it and either confirms it or lets you know it needs to change."],
+             'answer' => "You propose your own preferred date and time for your Title Defense, Proposal Defense, or Final Defense directly when you submit your application. Staff then reviews it and either confirms it or lets you know it needs to change."],
  
             ['category' => 'Applications', 'question' => 'What happens if my proposed defense date isn\'t approved?',
              'answer' => "Your application status changes to \"Reschedule Requested\" and you'll see the reason why (for example, panel availability). Go to your Application Details page and use \"Propose a New Date\" to submit another date for review — no need to go back to the office in person."],
@@ -158,20 +182,17 @@ class ChatbotKnowledgeSeeder extends Seeder
              'answer' => 'Go to Document Requests → New Request in StudiOUS, choose the document type, state your purpose, and pay online — no need to visit the Program In-Charge just to start the request. The fees and processing times are the same as listed in the Citizen\'s Charter.'],
  
             ['category' => 'Documents', 'question' => 'Can I track my document request status online?',
-             'answer' => 'Yes — every document request shows its live status (Submitted, Payment Verification, Processing, Ready for Release) on your Document Requests page, so you always know exactly where it stands without needing to ask staff.'],
+             'answer' => 'Yes — every document request shows its live status (Submitted, Processing, Ready for Release, Completed) on your Document Requests page, so you always know exactly where it stands without needing to ask staff.'],
  
             ['category' => 'Documents', 'question' => 'How will I know when my document is ready for pickup?',
              'answer' => 'You\'ll get an in-app notification and an email the moment staff marks it "Ready for Release" — you don\'t need to keep checking back or calling the Registrar.'],
  
             ['category' => 'Documents', 'question' => 'Do I still need to go to campus to get my document?',
-             'answer' => 'Yes — requesting and paying for a document is now fully online, but claiming the actual printed document (like your Diploma or OTR) still requires an in-person visit to the Registrar window, since it\'s a physical document that has to be handed to you or an authorized representative.'],
+             'answer' => 'Yes — requesting and paying for a document is now fully online, claiming the actual printed document (like your Diploma or OTR) requires an in-person visit to the OUS Office or have it delivered via LBC, since it\'s a physical document that has to be handed to you or an authorized representative. However, you can claim the scanned copy through the Facebook Messenger or Studious Portal'],
  
             // ---------------- Helpdesk ----------------
             ['category' => 'Support', 'question' => 'What is the Helpdesk for?',
              'answer' => 'The Helpdesk is where you go for anything that isn\'t answered by the Knowledge Base or by Leon — account issues, technical problems, a concern about a specific application, or anything you need a real staff member to look into personally.'],
- 
-            ['category' => 'Support', 'question' => 'Do I still submit a paper Client Feedback Form?',
-             'answer' => 'No — that\'s been replaced by the Helpdesk. If something isn\'t working right or you have a concern, submit a ticket there instead of filling out a paper form, and staff will respond to you directly through the system.'],
  
             ['category' => 'Support', 'question' => 'Can guests without an account use the Helpdesk?',
              'answer' => 'Yes — guests can submit a Helpdesk ticket without logging in by providing their name and email. Staff replies are sent by email in that case, since guests don\'t have a portal account to check for in-app replies.'],
@@ -180,7 +201,7 @@ class ChatbotKnowledgeSeeder extends Seeder
              'answer' => 'If you\'re logged in, go to Helpdesk to see all your tickets and their status (Open, Processing, Resolved, Closed) along with the full conversation thread. Guests can track their ticket through the emails they receive.'],
  
             ['category' => 'Support', 'question' => 'What\'s the difference between asking Leon and opening a Helpdesk ticket?',
-             'answer' => 'Ask Leon for general questions about requirements, fees, or how something works — he answers instantly using the Knowledge Base. Open a Helpdesk ticket when you need a staff member to personally look into something specific to your account, like a stuck application or a payment that isn\'t reflecting.'],
+             'answer' => 'Ask Leon for general questions about requirements, fees, or how something works — he answers instantly using the Knowledge Base. Open a Helpdesk ticket when you need a staff member to personally look into something specific to your account, like a stuck application or a error loggin in to your student portal or Studious portal.'],
  
             // ---------------- Getting started / general ----------------
             ['category' => 'Using StudiOUS', 'question' => 'Can guests use StudiOUS without an account?',
@@ -189,8 +210,11 @@ class ChatbotKnowledgeSeeder extends Seeder
             ['category' => 'Using StudiOUS', 'question' => 'Where can I ask questions about requirements or fees now?',
              'answer' => 'You can ask Leon (AI Chatbot) directly, browse the Knowledge Base for detailed articles organized by topic, or open a Helpdesk ticket if you need help with something specific to your own account.'],
  
-            ['category' => 'Using StudiOUS', 'question' => 'Do I need to create a new account for StudiOUS?',
-             'answer' => 'If you\'re already an enrolled student or employed teacher, register using your official student or employee number — the system will verify it against university records. If you\'re a Sub-Admin or Admin, your account is created for you by the Admin; there\'s no public registration for those roles.'],
+            [
+                'category' => 'Using StudiOUS',
+                'question' => 'Do I need to create a new account for StudiOUS?',
+                'answer' => "Yes, you are encouraged to create an account to fully access university student services, especially if you're an enrolled student. You can use either your personal email or institutional email."
+            ],
         ];
 
         foreach ($rows as $row) {

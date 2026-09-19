@@ -72,8 +72,8 @@
   }
 }
 
-/* --- Compact FAQ Quick Action Chips --- */
-.leon-faq-container {display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;padding-left:38px;max-width:88%;}
+/* --- Compact FAQ & Dynamic Suggestion Chips --- */
+.leon-faq-container {display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;padding-left:38px;max-width:88%;}
 .leon-faq-chip {
   background:#ffffff;border:1px solid #1e40af;color:#1e40af;
   padding:6px 12px;border-radius:14px;font-size:12px;font-weight:600;
@@ -107,6 +107,9 @@
   let open = false;
   let isStreaming = false;
   
+  // Track all topics/queries selected or typed by the user to prevent duplicates
+  let askedTopics = new Set();
+
   let history = [{ 
     role: 'assistant', 
     content: "Roar! I'm Leon, your StudiOUS assistant. Select a topic below or ask me a question!" 
@@ -141,22 +144,48 @@
     </svg>`;
   }
 
-  function renderContent(content, role) {
-      if (!content) return ''; 
-      if (role === 'user') return escapeHtml(content);
-      
-      // Render animated bouncing ellipsis indicator while loading initial response chunk
-      if (content === '…') {
-        return `<div class="leon-typing">
-          <span class="dot"></span>
-          <span class="dot"></span>
-          <span class="dot"></span>
-        </div>`;
-      }
+  // Parses raw message content to separate body text from CHIPS: [Chip 1] | [Chip 2]
+  // Filters out chips that match previously asked/selected topics
+  function parseMessageContent(rawContent) {
+    if (!rawContent) return { cleanText: '', chips: [] };
 
-      if (window.marked) return marked.parse(content.trim());
-      return escapeHtml(content);
+    let cleanText = rawContent;
+    let chips = [];
+
+    if (rawContent.includes('CHIPS:')) {
+      const parts = rawContent.split('CHIPS:');
+      cleanText = parts[0].trim();
+      const chipPart = parts[1] || '';
+      
+      const matches = chipPart.match(/\[(.*?)\]/g);
+      if (matches) {
+        chips = matches
+          .map(m => m.replace(/^\[/, '').replace(/\]$/, '').trim())
+          .filter(label => !askedTopics.has(label.toLowerCase()));
+      }
     }
+
+    return { cleanText, chips };
+  }
+
+  function renderContent(content, role) {
+    if (!content) return ''; 
+    if (role === 'user') return escapeHtml(content);
+    
+    // Render animated bouncing ellipsis indicator while loading initial response chunk
+    if (content === '…') {
+      return `<div class="leon-typing">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>`;
+    }
+
+    const { cleanText } = parseMessageContent(content);
+
+    if (window.marked) return marked.parse(cleanText.trim());
+    return escapeHtml(cleanText);
+  }
 
   function render(){
     const root = document.getElementById('leon-widget-root');
@@ -180,22 +209,38 @@
         <button class="leon-panel-close" onclick="window.__leonToggle()">&times;</button>
       </div>
       <div class="leon-panel-body" id="leonBody">
-        ${history.map((m, index) => `
+        ${history.map((m, index) => {
+          const { chips } = parseMessageContent(m.content);
+          const availableFaqs = faqList.filter(faq => !askedTopics.has(faq.toLowerCase()));
+
+          return `
           <div class="leon-msg-group ${m.role==='user'?'me':''}">
             <div class="leon-msg ${m.role==='user'?'me':''}">
               <div class="leon-av">${m.role==='user' ? 'You' : lionFace(28)}</div>
               <div class="leon-bubble">${renderContent(m.content, m.role)}</div>
             </div>
-            ${(index === 0 && m.role === 'assistant') ? `
+            
+            ${(index === 0 && m.role === 'assistant' && availableFaqs.length > 0) ? `
               <div class="leon-faq-container">
-                ${faqList.map(faq => `
+                ${availableFaqs.map(faq => `
                   <button class="leon-faq-chip ${isStreaming ? 'disabled' : ''}" onclick="window.__leonSendFaq('${escapeHtml(faq)}')">
                     ${escapeHtml(faq)}
                   </button>
                 `).join('')}
               </div>
             ` : ''}
-          </div>`).join('')}
+
+            ${(m.role === 'assistant' && chips.length > 0) ? `
+              <div class="leon-faq-container">
+                ${chips.map(chip => `
+                  <button class="leon-faq-chip ${isStreaming ? 'disabled' : ''}" onclick="window.__leonSendFaq('${escapeHtml(chip)}')">
+                    ${escapeHtml(chip)}
+                  </button>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>`;
+        }).join('')}
       </div>
       <div class="leon-panel-input">
         <input id="leonInput" placeholder="${isStreaming ? 'Leon is thinking...' : 'Ask Leon something...'}" ${isStreaming ? 'disabled' : ''} onkeydown="if(event.key==='Enter') window.__leonSend()">
@@ -230,6 +275,9 @@
     if (!input) return;
     const val = input.value.trim();
     if(!val) return;
+
+    // Track user input to prevent duplicate chip rendering
+    askedTopics.add(val.toLowerCase());
 
     isStreaming = true;
     history.push({ role:'user', content: val });

@@ -15,26 +15,29 @@ class ChatbotController extends Controller
         set_time_limit(120);
 
         $validated = $request->validate([
-            'message'             => 'required|string|max:1000',
-            'history'             => 'array|max:20',
-            'history.*.role'      => 'in:user,assistant',
-            'history.*.content'   => 'string|max:2000',
+            'message'           => 'required|string|max:1000',
+            'history'           => 'array|max:20',
+            'history.*.role'    => 'in:user,assistant',
+            'history.*.content' => 'string|max:2000',
         ]);
 
         $userMessage = trim($validated['message']);
         $history     = $validated['history'] ?? [];
 
-        $relevantArticles = $this->retrieveRelevantKnowledge($userMessage);
+        // Contextualize query if history exists to handle follow-up inputs like "yes" or "how much?"
+        $searchQuery = $this->rewriteQueryWithContext($userMessage, $history);
+
+        $relevantArticles = $this->retrieveRelevantKnowledge($searchQuery);
 
         $topMatch = $relevantArticles->first();
         $topSimilarity = isset($topMatch->similarity) ? (float) $topMatch->similarity : 0.0;
 
-        Log::info("Chatbot Log Check - Message: '{$userMessage}' | Similarity: {$topSimilarity}");
+        Log::info("Chatbot Log Check - Raw Message: '{$userMessage}' | Rewritten: '{$searchQuery}' | Similarity: {$topSimilarity}");
 
         // Flag as low similarity if score is under 0.65 or if no match exists
         $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topSimilarity < 0.65;
 
-        // Log ONLY if vector similarity is low AND message passes noise/greeting checks
+        // Log ONLY if vector similarity is low AND original message passes noise/greeting checks
         if ($hasLowSimilarity && $this->isLoggableInquiry($userMessage)) {
             $this->logUnhandledQuery($userMessage, $request);
         }
@@ -60,25 +63,28 @@ class ChatbotController extends Controller
         set_time_limit(120);
 
         $validated = $request->validate([
-            'message'             => 'required|string|max:1000',
-            'history'             => 'array|max:20',
-            'history.*.role'      => 'in:user,assistant',
-            'history.*.content'   => 'string|max:2000',
+            'message'           => 'required|string|max:1000',
+            'history'           => 'array|max:20',
+            'history.*.role'    => 'in:user,assistant',
+            'history.*.content' => 'string|max:2000',
         ]);
 
         $userMessage = trim($validated['message']);
         $history     = $validated['history'] ?? [];
 
-        $relevantArticles = $this->retrieveRelevantKnowledge($userMessage);
+        // Contextualize query if history exists to handle follow-up inputs like "yes" or "how much?"
+        $searchQuery = $this->rewriteQueryWithContext($userMessage, $history);
+
+        $relevantArticles = $this->retrieveRelevantKnowledge($searchQuery);
 
         $topMatch = $relevantArticles->first();
         $topSimilarity = isset($topMatch->similarity) ? (float) $topMatch->similarity : 0.0;
 
-        Log::info("Chatbot Log Check - Message: '{$userMessage}' | Similarity: {$topSimilarity}");
+        Log::info("Chatbot Log Check - Raw Message: '{$userMessage}' | Rewritten: '{$searchQuery}' | Similarity: {$topSimilarity}");
 
         $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topSimilarity < 0.65;
 
-        // Log ONLY if vector similarity is low AND message passes noise/greeting checks
+        // Log ONLY if vector similarity is low AND original message passes noise/greeting checks
         if ($hasLowSimilarity && $this->isLoggableInquiry($userMessage)) {
             $this->logUnhandledQuery($userMessage, $request);
         }
@@ -103,7 +109,7 @@ class ChatbotController extends Controller
             ],
             'contents' => $contents,
             'generationConfig' => [
-                'maxOutputTokens' => 1500,
+                'maxOutputTokens' => 2000,
                 'temperature'     => 0.3,
             ]
         ];
@@ -195,6 +201,59 @@ class ChatbotController extends Controller
         ]);
     }
 
+    /**
+     * Contextualizes short/ambiguous user inputs using conversation history into a standalone vector search query.
+     */
+    private function rewriteQueryWithContext(string $userMessage, array $history): string
+    {
+        if (empty($history)) {
+            return $userMessage;
+        }
+
+        $recentHistory = array_slice($history, -4);
+        
+        $formattedHistory = "";
+        foreach ($recentHistory as $turn) {
+            $role = $turn['role'] === 'assistant' ? 'Leon' : 'User';
+            $formattedHistory .= "{$role}: {$turn['content']}\n";
+        }
+
+        $instruction = "Given the conversation history and a user follow-up input (like 'yes', 'sure', 'ok', or 'how long'), identify the main document or topic discussed. Rewrite the user input into a full query covering requirements, processing time, and steps for that topic (e.g., 'Official Transcript of Records OTR requirements, processing time, and steps'). Do NOT answer the question. Return ONLY the rewritten query string.";
+
+        $prompt = "{$instruction}\n\n[CONVERSATION HISTORY]\n{$formattedHistory}\n[LATEST USER INPUT]\n{$userMessage}\n\nStandalone Query:";
+
+        $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
+        $model  = config('services.ai.model', 'gemini-3.6-flash');
+
+        $payload = [
+            'contents' => [
+                [
+                    'role' => 'user',
+                    'parts' => [['text' => $prompt]]
+                ]
+            ],
+            'generationConfig' => [
+                'temperature' => 0.0,
+                'maxOutputTokens' => 2000
+            ]
+        ];
+
+        try {
+            $response = $this->sendGeminiPost($model, $apiKey, $payload);
+            
+            if ($response->successful()) {
+                $rewritten = trim($response->json('candidates.0.content.parts.0.text') ?? '');
+                if (!empty($rewritten)) {
+                    return $rewritten;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Query contextualization failed: ' . $e->getMessage());
+        }
+
+        return $userMessage;
+    }
+
     private function retrieveRelevantKnowledge(string $userMessage, int $limit = 4)
     {
         $queryEmbedding = $this->getEmbedding($userMessage);
@@ -283,9 +342,26 @@ Provide clear and accurate answers grounded ONLY in the knowledge base context p
 Strict Constraints:
 
 * ANSWER PRECISION & CONTEXT DUMPING:
+  - If the user asks a specific sub-question (e.g., "how much is the OTR?"), answer ONLY that question.
+  - If the user accepts a follow-up offer (e.g., "yes", "sure") or asks a general question covering multiple aspects, provide ALL relevant details found in the context (requirements, processing time, and steps) in clean, structured sections.
   - Answer ONLY what the user explicitly asks for in your direct response.
   - DO NOT dump full context entries (such as listing all steps, timelines, and requirements) if the user only asked a specific sub-question (e.g., fee, deadline, or location).
-  - Give a direct, concise answer first. If the context contains additional procedural steps or requirements, briefly ask if the user would like details on those next.
+  - Give a direct, concise answer first.
+
+* FOLLOW-UP SUGGESTION CHIPS:
+  - Keep your main response text concise and direct.
+  - If additional relevant requirements, steps, or related details exist in the retrieved context, DO NOT ask conversational follow-up questions at the end of your message.
+  - Instead, append dynamic follow-up chips at the very end of your response on a new line using this exact format:
+    CHIPS: [Label 1] | [Label 2] | [Label 3]
+  - Guidelines for chips:
+    * Include 2 to 4 concise, max of 5, contextually relevant options based on the available knowledge base details, put the most relevant first.
+    * Each label must be a clear, clickable action phrase (e.g., [OTR Requirements], [OTR Processing Time], [Submit Payment Receipt]).
+    * DO NOT output words like "and so on", "etc.", or generic text inside or outside the brackets.
+    * Check conversation history: NEVER repeat topics or questions that the user has already asked about or selected previously.
+
+* LINK FORMATTING:
+  - Always format external links and portal URLs using standard Markdown links with full HTTPS protocols, e.g., [LandBank Link.BizPortal](https://www.lbp-eservices.com/egps/portal/index.jsp) add a blue color to the text with link.
+  - Never display long, raw URLs directly in plain text without markdown anchor tags.
 
 * GREETINGS:
   - If the user sends a casual greeting (e.g., "hi", "hello", "hey", "good morning") without asking a specific question, ignore the knowledge base context and respond warmly as Leon, briefly welcoming them and asking how you can help with their StudiOUS concerns today.
@@ -294,7 +370,7 @@ Strict Constraints:
 * GROUND TRUTH & MISSING INFO:
   - Answer ONLY using the knowledge base context provided below. Never guess, extrapolate, or invent fees, dates, or university policies.
   - Avoid repeating the same information multiple times in a single response.
-  - If the provided context does not contain enough information to answer fully, state clearly that you do not have that specific information yet and kindly direct the student to submit a Helpdesk ticket.
+  - If the provided context does not contain enough information to answer fully, state clearly that you do not have that specific information yet and kindly direct the student to check the Knowledge Base page or submit a Helpdesk ticket.
 
 * PRIVACY & ACCOUNT ACCESS:
   - Never ask for, request, or reference a specific student's personal application status, payment details, or private account information—you have no access to live user records.
@@ -327,7 +403,7 @@ PROMPT;
             ],
             'contents' => $contents,
             'generationConfig' => [
-                'maxOutputTokens' => 1500,
+                'maxOutputTokens' => 2000,
                 'temperature'     => 0.3,
             ]
         ];
