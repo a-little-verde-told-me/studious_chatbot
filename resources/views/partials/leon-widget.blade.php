@@ -107,13 +107,22 @@
   let open = false;
   let isStreaming = false;
   
-  // Track all topics/queries selected or typed by the user to prevent duplicates
-  let askedTopics = new Set();
-
-  let history = [{ 
+  // Restore history from sessionStorage if available, otherwise use default greeting
+  const savedHistory = sessionStorage.getItem('leon_chat_history');
+  let history = savedHistory ? JSON.parse(savedHistory) : [{ 
     role: 'assistant', 
     content: "Roar! I'm Leon, your StudiOUS assistant. Select a topic below or ask me a question!" 
   }];
+
+  // Restore askedTopics Set from sessionStorage if available
+  const savedTopics = sessionStorage.getItem('leon_asked_topics');
+  let askedTopics = new Set(savedTopics ? JSON.parse(savedTopics) : []);
+
+  // Sync state with sessionStorage
+  function saveState() {
+    sessionStorage.setItem('leon_chat_history', JSON.stringify(history));
+    sessionStorage.setItem('leon_asked_topics', JSON.stringify(Array.from(askedTopics)));
+  }
 
   const faqList = [
     "How to enroll?",
@@ -144,8 +153,6 @@
     </svg>`;
   }
 
-  // Parses raw message content to separate body text from CHIPS: [Chip 1] | [Chip 2]
-  // Filters out chips that match previously asked/selected topics
   function parseMessageContent(rawContent) {
     if (!rawContent) return { cleanText: '', chips: [] };
 
@@ -172,7 +179,6 @@
     if (!content) return ''; 
     if (role === 'user') return escapeHtml(content);
     
-    // Render animated bouncing ellipsis indicator while loading initial response chunk
     if (content === '…') {
       return `<div class="leon-typing">
         <span class="dot"></span>
@@ -276,13 +282,14 @@
     const val = input.value.trim();
     if(!val) return;
 
-    // Track user input to prevent duplicate chip rendering
     askedTopics.add(val.toLowerCase());
 
     isStreaming = true;
     history.push({ role:'user', content: val });
     history.push({ role:'assistant', content: '…' });
     input.value = '';
+    
+    saveState();
     render();
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
@@ -306,6 +313,7 @@
           content: "You're sending messages too fast. Please wait a moment."
         };
         isStreaming = false;
+        saveState();
         render();
         return;
       }
@@ -324,7 +332,6 @@
         const chunk = decoder.decode(value, { stream: true });
         rawBuffer += chunk;
 
-        // Check if Gemini API returned a quota or error JSON object in the stream
         if (rawBuffer.includes('RESOURCE_EXHAUSTED') || rawBuffer.includes('"error":')) {
           try {
             const errJson = JSON.parse(rawBuffer);
@@ -332,9 +339,7 @@
               assistantMessage = "⚠️ Gemini API Quota Exceeded (429). Please wait a moment or check your Google AI Studio plan limits.";
               break;
             }
-          } catch(e) {
-            // Wait for full JSON payload if it's still streaming chunks
-          }
+          } catch(e) {}
         }
 
         const lines = chunk.split('\n');
@@ -362,7 +367,6 @@
 
       if (!assistantMessage) {
         history[history.length - 1].content = "⚠️ Gemini API Quota Exceeded (429). Please try again later.";
-        render();
       }
 
     } catch(err) {
@@ -372,6 +376,7 @@
       };
     } finally {
       isStreaming = false;
+      saveState();
       render();
     }
   };
