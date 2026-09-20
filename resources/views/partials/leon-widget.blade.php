@@ -72,20 +72,50 @@
   }
 }
 
-/* --- Compact FAQ & Dynamic Suggestion Chips --- */
-.leon-faq-container {display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;padding-left:38px;max-width:88%;}
+/* --- Uniform FAQ & Dynamic Suggestion Chips --- */
+.leon-faq-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-left: 38px;
+  width: calc(100% - 38px);
+  box-sizing: border-box;
+}
+
 .leon-faq-chip {
-  background:#ffffff;border:1px solid #1e40af;color:#1e40af;
-  padding:6px 12px;border-radius:14px;font-size:12px;font-weight:600;
-  cursor:pointer;transition:all 0.15s ease;text-align:center;
-  white-space:normal;line-height:1.2;
+  background: #ffffff;
+  border: 1px solid #1e40af;
+  color: #1e40af;
+  padding: 8px 14px;
+  border-radius: 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.3;
+  width: 100%;
+  box-sizing: border-box;
+  /* --- FIXED UNIFORM HEIGHT --- */
+  height: 44px;              /* Sets equal height for every button */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
 .leon-faq-chip:hover {
-  background:#1e40af;color:#ffffff;transform:translateY(-1px);
-  box-shadow:0 2px 6px rgba(30, 64, 175, 0.2);
+  background: #1e40af;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(30, 64, 175, 0.2);
 }
+
 .leon-faq-chip.disabled {
-  opacity: 0.5; pointer-events: none; cursor: not-allowed;
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
 }
 
 .leon-av{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
