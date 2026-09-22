@@ -17,8 +17,8 @@
 .leon-eye{transform-box:fill-box;transform-origin:center;animation:leonBlink 4.6s ease-in-out infinite;}
 @keyframes leonBlink{0%,90%,100%{transform:scaleY(1);}93%{transform:scaleY(.1);}96%{transform:scaleY(1);}}
 
-.leon-panel{position:fixed;bottom:104px;right:24px;width:346px;max-width:calc(100vw - 32px);
-  height:472px;max-height:calc(100vh - 150px);background:#fff;border-radius:18px;
+.leon-panel{position:fixed;bottom:104px;right:24px;width:450px;max-width:calc(100vw - 32px);
+  height:600px;max-height:calc(100vh - 150px);background:#fff;border-radius:18px;
   box-shadow:0 22px 60px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;z-index:960;}
 .leon-panel-header{background:#1e40af;padding:14px 16px;
   display:flex;justify-content:space-between;align-items:center;color:#fff;flex-shrink:0;}
@@ -214,10 +214,10 @@
   }
 
   const faqList = [
-    "How to enroll?",
+    "How to Request a Document?",
     "What are the payment methods?",
-    "Application requirements",
-    "How to Request a Document?"
+    "What are the available academic applications?",
+    "How to open a Helpdesk Ticket?"
   ];
 
   function lionFace(size){

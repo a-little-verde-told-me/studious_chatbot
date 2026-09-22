@@ -39,7 +39,6 @@ class ChatbotKnowledgeSeeder extends Seeder
             'answer'   => "After paying for your request or application, submit your receipt or reference number based on how you applied:
 
             - **StudiOUS Portal Requests or Applications:** Upload your receipt or reference number directly within the portal before submitting your request.
-            - **Non-Portal Requests or Applications:** Send a photo or copy of your receipt to your Program In-Charge via Facebook Messenger.
             - **Walk-in Requests:** Submit your physical receipt directly to the OUS Office staff, or take a photo of it and send it to your Program In-Charge via Facebook Messenger."
             ],
 
@@ -151,6 +150,12 @@ class ChatbotKnowledgeSeeder extends Seeder
             // ---------------- Applications (general) ----------------
             ['category' => 'Using StudiOUS', 'question' => 'Do I still need to visit the office in person to submit an application?',
              'answer' => "No — with StudiOUS, you submit your application, upload your requirements, and pay online without visiting the Program In-Charge in person. You'll only need to be on campus for things that are inherently physical, like your actual defense (if you chose to conduct it on-site) or claiming a printed Diploma."],
+
+            [
+                'category' => 'Using StudiOUS',
+                'question' => 'What are the available academic applications?',
+                'answer'   => "You can submit various academic applications directly through your StudiOUS account, including:\n\n- Comprehensive Examination\n- Title Defense\n- Proposal Defense\n- Final Defense\n- Graduation Application"
+            ],
  
             ['category' => 'Using StudiOUS', 'question' => 'How is applying through StudiOUS different from the old process?',
              'answer' => "The requirements, fees, and processing times from the Citizen's Charter still apply — that's policy and it hasn't changed. What's different is how you interact with the office: instead of visiting the Program In-Charge to release a paper form, you fill out the application online, upload requirements as files, and follow every status update yourself in your Application Tracker instead of waiting to be told in person."],
@@ -175,7 +180,7 @@ class ChatbotKnowledgeSeeder extends Seeder
              'answer' => 'Both: you propose the date and time that works for you, and staff confirms it (adding the venue) or rejects it with a reason if there\'s a conflict, such as panel availability. You always get the final say by proposing again if your first date doesn\'t work out.'],
  
             ['category' => 'Applications', 'question' => 'How do I know if my application has moved forward?',
-             'answer' => "You don't need to check in person or call the office. StudiOUS sends you an in-app notification and an email at every major step — when your payment is verified, when your requirements are approved, when your schedule is confirmed, or when it's returned for corrections."],
+             'answer' => "You don't need to check in person or call the office. StudiOUS sends you an in-app notification and an email at every major step — when your application is approved (this includes your receipt/payment and reqiurements verfication), when your schedule is confirmed, or when it's returned for corrections."],
  
             // ---------------- Document Requests ----------------
             ['category' => 'Documents', 'question' => 'How do I request a document like my TOR or Certification now?',
