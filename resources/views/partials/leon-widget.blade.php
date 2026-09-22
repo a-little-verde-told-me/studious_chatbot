@@ -35,13 +35,66 @@
 .leon-msg{display:flex;gap:8px;width:100%;}
 .leon-msg.me{flex-direction:row-reverse;}
 
-/* --- Compact Formatted Bubble & Markdown Styles --- */
-.leon-bubble{background:#F1F2F5;padding:10px 14px;border-radius:14px;font-size:13.5px;line-height:1.45;color:#1e293b;word-break:break-word;max-width:82%;height:auto;min-height:fit-content;}
-.leon-bubble p{margin:0 0 6px 0;line-height:1.45;}
-.leon-bubble p:last-child{margin-bottom:0;}
-.leon-bubble ul, .leon-bubble ol{margin:4px 0 6px 0;padding-left:18px;}
-.leon-bubble li{margin-bottom:2px;}
+/* --- Compact Formatted Bubble & Enhanced Markdown Styles --- */
+.leon-bubble{
+  background:#F1F2F5;
+  padding:10px 14px;
+  border-radius:14px;
+  font-size:13.5px;
+  line-height:1.45;
+  color:#1e293b;
+  word-break:break-word;
+  max-width:85%;
+  height:auto;
+  min-height:fit-content;
+}
+.leon-bubble p {
+  margin:0 0 8px 0;
+  line-height:1.45;
+}
+.leon-bubble p:last-child {
+  margin-bottom:0;
+}
+
+/* Bullet Points (Unordered Lists) */
+.leon-bubble ul {
+  list-style-type: disc !important;
+  margin: 6px 0 8px 0 !important;
+  padding-left: 20px !important;
+}
+
+/* Step-by-Step Instructions (Ordered Lists) */
+.leon-bubble ol {
+  list-style-type: decimal !important;
+  margin: 6px 0 8px 0 !important;
+  padding-left: 20px !important;
+}
+
+/* List Items Formatting */
+.leon-bubble li {
+  margin-bottom: 4px !important;
+  line-height: 1.4 !important;
+  display: list-item !important;
+}
+
+/* Bold Section Headings inside Bubbles */
+.leon-bubble strong, .leon-bubble b {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+/* Formatted Links Styling */
+.leon-bubble a {
+  color: #2563eb !important;
+  text-decoration: underline !important;
+  word-break: break-all;
+}
+.leon-bubble a:hover {
+  color: #1d4ed8 !important;
+}
+
 .leon-msg.me .leon-bubble{background:#1e40af;color:#fff;}
+.leon-msg.me .leon-bubble a { color: #93c5fd !important; }
 
 /* --- Animated Ellipsis Typing Indicator --- */
 .leon-typing {
@@ -98,8 +151,7 @@
   line-height: 1.3;
   width: 100%;
   box-sizing: border-box;
-  /* --- FIXED UNIFORM HEIGHT --- */
-  height: 44px;              /* Sets equal height for every button */
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -137,18 +189,25 @@
   let open = false;
   let isStreaming = false;
   
-  // Restore history from sessionStorage if available, otherwise use default greeting
+  // Configure marked for smooth line breaks & markdown lists
+  if (window.marked) {
+    window.marked.setOptions({
+      gfm: true,
+      breaks: true
+    });
+  }
+
+  // Restore history from sessionStorage if available
   const savedHistory = sessionStorage.getItem('leon_chat_history');
   let history = savedHistory ? JSON.parse(savedHistory) : [{ 
     role: 'assistant', 
     content: "Roar! I'm Leon, your StudiOUS assistant. Select a topic below or ask me a question!" 
   }];
 
-  // Restore askedTopics Set from sessionStorage if available
+  // Restore askedTopics Set from sessionStorage
   const savedTopics = sessionStorage.getItem('leon_asked_topics');
   let askedTopics = new Set(savedTopics ? JSON.parse(savedTopics) : []);
 
-  // Sync state with sessionStorage
   function saveState() {
     sessionStorage.setItem('leon_chat_history', JSON.stringify(history));
     sessionStorage.setItem('leon_asked_topics', JSON.stringify(Array.from(askedTopics)));
@@ -219,7 +278,9 @@
 
     const { cleanText } = parseMessageContent(content);
 
-    if (window.marked) return marked.parse(cleanText.trim());
+    if (window.marked) {
+      return marked.parse(cleanText.trim());
+    }
     return escapeHtml(cleanText);
   }
 
@@ -341,6 +402,17 @@
         history[history.length - 1] = {
           role: 'assistant',
           content: "You're sending messages too fast. Please wait a moment."
+        };
+        isStreaming = false;
+        saveState();
+        render();
+        return;
+      }
+
+      if (response.status === 503) {
+        history[history.length - 1] = {
+          role: 'assistant',
+          content: "Leon is currently experiencing high server load. Please try asking again in a few seconds."
         };
         isStreaming = false;
         saveState();

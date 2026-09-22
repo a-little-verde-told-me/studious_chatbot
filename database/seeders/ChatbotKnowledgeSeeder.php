@@ -187,8 +187,11 @@ class ChatbotKnowledgeSeeder extends Seeder
             ['category' => 'Documents', 'question' => 'How will I know when my document is ready for pickup?',
              'answer' => 'You\'ll get an in-app notification and an email the moment staff marks it "Ready for Release" — you don\'t need to keep checking back or calling the Registrar.'],
  
-            ['category' => 'Documents', 'question' => 'Do I still need to go to campus to get my document?',
-             'answer' => 'Yes — requesting and paying for a document is now fully online, claiming the actual printed document (like your Diploma or OTR) requires an in-person visit to the OUS Office or have it delivered via LBC, since it\'s a physical document that has to be handed to you or an authorized representative. However, you can claim the scanned copy through the Facebook Messenger or Studious Portal'],
+            [
+                'category' => 'Documents',
+                'question' => 'Do I still need to go to campus to get my document?',
+                'answer'   => "Requesting and paying for documents can be done either online through the StudiOUS portal or in-person (walk-in) at the campus.\n\nHow you receive your document depends on how and where you requested it:\n\n- **Walk-in Requests:** If you requested and paid for your document directly on campus, you can claim the physical copy at the OUS Office. Please note that claiming is subject to document processing time, as some documents cannot be released immediately on the same day.\n- **Online Requests:** How you receive your document depends on the claiming option you selected in your online Document Request Form:\n  - **Pick-up / In-Person:** You or your authorized representative must visit the OUS Office on campus to claim the physical document.\n  - **Scanned Copy:** You can view and download the digital copy directly from your StudiOUS account once it is marked as ready to release.\n  - **Delivery via LBC:** The physical document will be shipped directly to your address via LBC. You can track the status through your StudiOUS account once it is ready for release.",
+            ],
  
             // ---------------- Helpdesk ----------------
             ['category' => 'Support', 'question' => 'What is the Helpdesk for?',

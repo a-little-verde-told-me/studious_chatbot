@@ -14,7 +14,7 @@ class ChatbotController extends Controller
     {
         set_time_limit(120);
 
-        $validated = $request->validate([
+        $validated =$request->validate([
             'message'           => 'required|string|max:1000',
             'history'           => 'array|max:20',
             'history.*.role'    => 'in:user,assistant',
@@ -22,35 +22,30 @@ class ChatbotController extends Controller
         ]);
 
         $userMessage = trim($validated['message']);
-        $history     = $validated['history'] ?? [];
+        $history     =$validated['history'] ?? [];
 
-        // Contextualize query if history exists to handle follow-up inputs like "yes" or "how much?"
-        $searchQuery = $this->rewriteQueryWithContext($userMessage, $history);
+        $relevantArticles = $this->retrieveRelevantKnowledge($userMessage);
 
-        $relevantArticles = $this->retrieveRelevantKnowledge($searchQuery);
+        $topMatch = $relevantArticles->first();$topSimilarity = isset($topMatch->similarity) ? (float)$topMatch->similarity : 0.0;
 
-        $topMatch = $relevantArticles->first();
-        $topSimilarity = isset($topMatch->similarity) ? (float) $topMatch->similarity : 0.0;
-
-        Log::info("Chatbot Log Check - Raw Message: '{$userMessage}' | Rewritten: '{$searchQuery}' | Similarity: {$topSimilarity}");
+        Log::info("Chatbot Log Check - Raw Message: '{$userMessage}' | Similarity: {$topSimilarity}");
 
         // Flag as low similarity if score is under 0.65 or if no match exists
         $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topSimilarity < 0.65;
 
         // Log ONLY if vector similarity is low AND original message passes noise/greeting checks
-        if ($hasLowSimilarity && $this->isLoggableInquiry($userMessage)) {
-            $this->logUnhandledQuery($userMessage, $request);
+        if ($hasLowSimilarity &&$this->isLoggableInquiry($userMessage)) {$this->logUnhandledQuery($userMessage,$request);
         }
 
         $systemPrompt = $this->buildSystemPrompt($relevantArticles);
 
         try {
-            $reply = $this->callAiApi($systemPrompt, $history, $userMessage);
+            $reply = $this->callAiApi($systemPrompt, $history,$userMessage);
         } catch (\Throwable $e) {
             Log::warning('Leon chatbot API call failed: ' . $e->getMessage());
 
             return response()->json([
-                'reply'    => "I'm having trouble connecting to my knowledge base right now due to a network delay. Please come back and try again later, or open a Helpdesk ticket.",
+                'reply'    => "I'm having trouble connecting to my knowledge base right now due to a network delay. Please come back and try again later, or go toKnowledge-base page or open a Helpdesk ticket.",
                 'fallback' => true,
             ]);
         }
@@ -62,7 +57,7 @@ class ChatbotController extends Controller
     {
         set_time_limit(120);
 
-        $validated = $request->validate([
+        $validated =$request->validate([
             'message'           => 'required|string|max:1000',
             'history'           => 'array|max:20',
             'history.*.role'    => 'in:user,assistant',
@@ -70,30 +65,24 @@ class ChatbotController extends Controller
         ]);
 
         $userMessage = trim($validated['message']);
-        $history     = $validated['history'] ?? [];
+        $history     =$validated['history'] ?? [];
 
-        // Contextualize query if history exists to handle follow-up inputs like "yes" or "how much?"
-        $searchQuery = $this->rewriteQueryWithContext($userMessage, $history);
+        $relevantArticles = $this->retrieveRelevantKnowledge($userMessage);
 
-        $relevantArticles = $this->retrieveRelevantKnowledge($searchQuery);
+        $topMatch = $relevantArticles->first();$topSimilarity = isset($topMatch->similarity) ? (float)$topMatch->similarity : 0.0;
 
-        $topMatch = $relevantArticles->first();
-        $topSimilarity = isset($topMatch->similarity) ? (float) $topMatch->similarity : 0.0;
-
-        Log::info("Chatbot Log Check - Raw Message: '{$userMessage}' | Rewritten: '{$searchQuery}' | Similarity: {$topSimilarity}");
+        Log::info("Chatbot Log Check - Raw Message: '{$userMessage}' | Similarity: {$topSimilarity}");
 
         $hasLowSimilarity = !$topMatch || !isset($topMatch->similarity) || $topSimilarity < 0.65;
 
         // Log ONLY if vector similarity is low AND original message passes noise/greeting checks
-        if ($hasLowSimilarity && $this->isLoggableInquiry($userMessage)) {
-            $this->logUnhandledQuery($userMessage, $request);
+        if ($hasLowSimilarity &&$this->isLoggableInquiry($userMessage)) {$this->logUnhandledQuery($userMessage,$request);
         }
 
         $systemPrompt = $this->buildSystemPrompt($relevantArticles);
 
         $contents = [];
-        foreach ($history as $turn) {
-            $contents[] = [
+        foreach ($history as $turn) {$contents[] = [
                 'role'  => $turn['role'] === 'assistant' ? 'model' : 'user',
                 'parts' => [['text' => $turn['content']]],
             ];
@@ -115,10 +104,9 @@ class ChatbotController extends Controller
         ];
 
         $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
-        $primaryModel = config('services.ai.model', 'gemini-3.6-flash');
-        $fallbackModel = 'gemini-3.5-flash';
+        $primaryModel = config('services.ai.model', 'gemini-3.6-flash');$fallbackModel = 'gemini-3.5-flash';
 
-        return new StreamedResponse(function () use ($primaryModel, $fallbackModel, $apiKey, $payload) {
+        return new StreamedResponse(function () use ($primaryModel,$fallbackModel, $apiKey,$payload) {
             try {
                 $url = "https://generativelanguage.googleapis.com/v1beta/models/{$primaryModel}:streamGenerateContent?alt=sse";
 
@@ -131,7 +119,7 @@ class ChatbotController extends Controller
                     $http->withoutVerifying();
                 }
 
-                $response = $http->send('POST', $url, [
+                $response = $http->send('POST',$url, [
                     'json' => $payload,
                     'stream' => true,
                 ]);
@@ -152,7 +140,7 @@ class ChatbotController extends Controller
                         $fallbackHttp->withoutVerifying();
                     }
 
-                    $response = $fallbackHttp->send('POST', $fallbackUrl, [
+                    $response = $fallbackHttp->send('POST',$fallbackUrl, [
                         'json' => $payload,
                         'stream' => true,
                     ]);
@@ -162,10 +150,10 @@ class ChatbotController extends Controller
                     throw new \RuntimeException('Gemini stream API returned status ' . $response->status());
                 }
 
-                $body = $response->toPsrResponse()->getBody();
+                $body =$response->toPsrResponse()->getBody();
 
                 while (!$body->eof()) {
-                    $chunk = $body->read(1024);
+                    $chunk =$body->read(1024);
                     echo $chunk;
                     if (ob_get_level() > 0) {
                         ob_flush();
@@ -201,62 +189,7 @@ class ChatbotController extends Controller
         ]);
     }
 
-    /**
-     * Contextualizes short/ambiguous user inputs using conversation history into a standalone vector search query.
-     */
-    private function rewriteQueryWithContext(string $userMessage, array $history): string
-    {
-        if (empty($history)) {
-            return $userMessage;
-        }
-
-        $recentHistory = array_slice($history, -4);
-        
-        $formattedHistory = "";
-        foreach ($recentHistory as $turn) {
-            $role = $turn['role'] === 'assistant' ? 'Leon' : 'User';
-            $formattedHistory .= "{$role}: {$turn['content']}\n";
-        }
-
-        $instruction = "Given the conversation history and a user follow-up input (like 'yes', 'sure', 'ok', or 'how long'), identify the main document or topic discussed. Rewrite the user input into a full query covering requirements, processing time, and steps for that topic (e.g., 'Official Transcript of Records OTR requirements, processing time, and steps'). Do NOT answer the question. Return ONLY the rewritten query string.";
-
-        $prompt = "{$instruction}\n\n[CONVERSATION HISTORY]\n{$formattedHistory}\n[LATEST USER INPUT]\n{$userMessage}\n\nStandalone Query:";
-
-        $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
-        $model  = config('services.ai.model', 'gemini-3.6-flash');
-
-        $payload = [
-            'contents' => [
-                [
-                    'role' => 'user',
-                    'parts' => [['text' => $prompt]]
-                ]
-            ],
-            'generationConfig' => [
-                'temperature' => 0.0,
-                'maxOutputTokens' => 2000
-            ]
-        ];
-
-        try {
-            $response = $this->sendGeminiPost($model, $apiKey, $payload);
-            
-            if ($response->successful()) {
-                $rewritten = trim($response->json('candidates.0.content.parts.0.text') ?? '');
-                if (!empty($rewritten)) {
-                    return $rewritten;
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Query contextualization failed: ' . $e->getMessage());
-        }
-
-        return $userMessage;
-    }
-
-    private function retrieveRelevantKnowledge(string $userMessage, int $limit = 4)
-    {
-        $queryEmbedding = $this->getEmbedding($userMessage);
+    private function retrieveRelevantKnowledge(string $userMessage, int $limit = 4)     {$queryEmbedding = $this->getEmbedding($userMessage);
 
         if (!$queryEmbedding) {
             return ChatbotKnowledge::query()->limit($limit)->get(['question', 'answer', 'category']);
@@ -268,9 +201,9 @@ class ChatbotController extends Controller
             return ChatbotKnowledge::query()->limit($limit)->get(['question', 'answer', 'category']);
         }
 
-        $scoredArticles = $articles->map(function ($article) use ($queryEmbedding) {
-            $storedEmbedding = is_string($article->embedding) ? json_decode($article->embedding, true) : $article->embedding;
-            $article->similarity = $this->cosineSimilarity($queryEmbedding, $storedEmbedding ?? []);
+        $scoredArticles =$articles->map(function ($article) use ($queryEmbedding) {
+            $storedEmbedding = is_string($article->embedding) ? json_decode($article->embedding, true) :$article->embedding;
+            $article->similarity =$this->cosineSimilarity($queryEmbedding,$storedEmbedding ?? []);
             return $article;
         });
 
@@ -283,7 +216,7 @@ class ChatbotController extends Controller
         $model = 'gemini-embedding-001';
 
         try {
-            $http = Http::withHeaders(['x-goog-api-key' => $apiKey])
+            $http = Http::withHeaders(['x-goog-api-key' =>$apiKey])
                 ->timeout(15)
                 ->connectTimeout(10);
 
@@ -308,7 +241,7 @@ class ChatbotController extends Controller
         return null;
     }
 
-    private function cosineSimilarity(array $vecA, array $vecB): float
+    private function cosineSimilarity(array $vecA, array$vecB): float
     {
         if (empty($vecA) || empty($vecB) || count($vecA) !== count($vecB)) {
             return 0.0;
@@ -318,9 +251,8 @@ class ChatbotController extends Controller
         $normA = 0;
         $normB = 0;
 
-        for ($i = 0; $i < count($vecA); $i++) {
-            $dotProduct += $vecA[$i] * $vecB[$i];
-            $normA += $vecA[$i] ** 2;
+        for ($i = 0; $i < count($vecA);$i++) {
+            $dotProduct +=$vecA[$i] *$vecB[$i];$normA += $vecA[$i] ** 2;
             $normB += $vecB[$i] ** 2;
         }
 
@@ -330,16 +262,23 @@ class ChatbotController extends Controller
 
     private function buildSystemPrompt($articles): string
     {
-        $context = $articles->isEmpty()
+        $context =$articles->isEmpty()
             ? 'No matching articles were found in the knowledge base.'
             : $articles->map(fn ($a) => "Q: {$a->question}\nA: {$a->answer}")->implode("\n\n");
 
         return <<<PROMPT
 You are Leon, the friendly lion mascot and official AI assistant for StudiOUS (Pangasinan State University Open University Systems student services portal).
 
-Provide clear and accurate answers grounded ONLY in the knowledge base context provided below. Always structure your responses neatly using distinct paragraphs, bullet points, or step-by-step lists (use numbering)  when providing detailed instructions or multi-part answers. If relevant, provide links to appropriate sections of the StudiOUS portal or official resources for further guidance.
+Provide clear and accurate answers grounded ONLY in the knowledge base context provided below. Always structure your responses neatly using distinct paragraphs, bullet points, or step-by-step lists with proper numbering when providing detailed instructions or multi-part answers. If relevant, provide links to appropriate sections of the StudiOUS portal or official resources for further guidance.
 
 Strict Constraints:
+
+* RESPONSE STRUCTURE & FORMATTING:
+  - Headers: Use bold section headings on their own line for major groups (e.g., **Requirements:** or **Application Steps:**).
+  - Unordered Lists (Requirements/Features): Always start bullet points with a dash (`- `) on a new line (e.g., `- Completion of academic requirements`).
+  - Ordered Lists (Sequential Steps): Always start sequential steps with explicit numbering (`1. `, `2. `, `3. `) on a new line (e.g., `1. **Submit Form:** Fill out the form...`).
+  - Sub-bullets: Indent sub-details under numbered steps using two spaces and a dash (`  - `).
+  - Spacing: Leave an empty line before and after lists to ensure proper Markdown rendering.
 
 * ANSWER PRECISION & CONTEXT DUMPING:
   - If the user asks a specific sub-question (e.g., "how much is the OTR?"), answer ONLY that question.
@@ -355,12 +294,13 @@ Strict Constraints:
     CHIPS: [Label 1] | [Label 2] | [Label 3]
   - Guidelines for chips:
     * Include 2 to 4 concise, max of 5, contextually relevant options based on the available knowledge base details, put the most relevant first.
-    * Each label must be a clear, clickable action phrase (e.g., [OTR Requirements], [OTR Processing Time], [Submit Payment Receipt]).
+    * Each label must be a clear, clickable action phrase (e.g., [How to...], [What are...], [When...]).
     * DO NOT output words like "and so on", "etc.", or generic text inside or outside the brackets.
     * Check conversation history: NEVER repeat topics or questions that the user has already asked about or selected previously.
 
 * LINK FORMATTING:
-  - Always format external links and portal URLs using standard Markdown links with full HTTPS protocols, e.g., [LandBank Link.BizPortal](https://www.lbp-eservices.com/egps/portal/index.jsp) add a blue color to the text with link.
+  - Whenever you mention LandBank's Link.BizPortal, ALWAYS format it strictly as a Markdown hyperlink: [LandBank Link.BizPortal](https://www.lbp-eservices.com/egps/portal/index.jsp).
+  - Always format external links and portal URLs using standard Markdown links with full HTTPS protocols.
   - Never display long, raw URLs directly in plain text without markdown anchor tags.
 
 * GREETINGS:
@@ -381,12 +321,11 @@ KNOWLEDGE BASE CONTEXT:
 PROMPT;
     }
 
-    private function callAiApi(string $systemPrompt, array $history, string $userMessage): string
+    private function callAiApi(string $systemPrompt, array $history, string$userMessage): string
     {
         $contents = [];
 
-        foreach ($history as $turn) {
-            $contents[] = [
+        foreach ($history as $turn) {$contents[] = [
                 'role'  => $turn['role'] === 'assistant' ? 'model' : 'user',
                 'parts' => [['text' => $turn['content']]],
             ];
@@ -410,25 +349,24 @@ PROMPT;
 
         $apiKey = env('AI_API_KEY') ?? config('services.ai.key');
         
-        $primaryModel  = config('services.ai.model', 'gemini-3.6-flash');
-        $fallbackModel = 'gemini-3.5-flash';
+        $primaryModel  = config('services.ai.model', 'gemini-3.6-flash');$fallbackModel = 'gemini-3.5-flash';
 
-        $response = $this->sendGeminiPost($primaryModel, $apiKey, $payload);
+        $response = $this->sendGeminiPost($primaryModel, $apiKey,$payload);
 
         if ($response->status() === 429) {
             Log::warning("Gemini primary model ({$primaryModel}) hit rate limit (429). Retrying with fallback ({$fallbackModel}).");
-            $response = $this->sendGeminiPost($fallbackModel, $apiKey, $payload);
+            $response = $this->sendGeminiPost($fallbackModel, $apiKey,$payload);
         }
 
         if ($response->failed()) {
-            throw new \RuntimeException('Gemini API returned status ' . $response->status() . ': ' . $response->body());
+            throw new \RuntimeException('Gemini API returned status ' . $response->status() . ': ' .$response->body());
         }
 
         return $response->json('candidates.0.content.parts.0.text')
-            ?? "I'm not sure how to answer that yet — please try rephrasing, or open a Helpdesk ticket.";
+            ?? "I'm not sure how to answer that yet — please try rephrasing, or go to Knowledge-based page or open a Helpdesk ticket.";
     }
 
-    private function sendGeminiPost(string $model, string $apiKey, array $payload)
+    private function sendGeminiPost(string $model, string $apiKey, array$payload)
     {
         $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent";
 
@@ -441,10 +379,10 @@ PROMPT;
             $http->withoutVerifying();
         }
 
-        return $http->post($url, $payload);
+        return $http->post($url,$payload);
     }
     
-    private function logUnhandledQuery(string $message, Request $request): void
+    private function logUnhandledQuery(string $message, Request$request): void
     {
         try {
             \App\Models\UnhandledChatbotQuery::forceCreate([
@@ -459,8 +397,8 @@ PROMPT;
     private function isLoggableInquiry(string $message): bool
     {
         $clean = strtolower(trim($message));
-        $cleanNormalized = preg_replace('/[^\p{L}\p{N}\s]/u', '', $clean);
-        $words = array_values(array_filter(explode(' ', $cleanNormalized)));
+        $cleanNormalized = preg_replace('/[^\p{L}\p{N}\s]/u', '',$clean);
+        $words = array_values(array_filter(explode(' ',$cleanNormalized)));
 
         // Rule 1: Ignore ultra-short noise or single-word inputs (e.g., "ok", "lol", "hi", "thanks")
         if (count($words) < 2) {
@@ -475,7 +413,7 @@ PROMPT;
         ];
 
         if (count($words) <= 5) {
-            foreach ($pureGreetings as $greeting) {
+            foreach ($pureGreetings as$greeting) {
                 if (str_contains($clean, $greeting) && count($words) <= 3) {
                     return false;
                 }
